@@ -1,6 +1,6 @@
 # BiteLens
 
-A personal native iPhone app for reviewing and recording photo-based meal estimates.
+A personal iPhone app for reviewing and recording photo-based meal estimates.
 Targets iOS 18 or newer. It includes existing-account email/password sign-in, secure session
 retention, approved-owner gating, explicit OpenAI/Grok selection, and camera-first offline capture.
 Meal Drafts, optional notes, and chosen meal times persist locally. Private photos expire exactly
