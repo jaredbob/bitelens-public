@@ -13,7 +13,7 @@ if ! awk -v version="${tag#v};" '
         if ($3 != version) mismatch = 1
     }
     END { exit (count == 0 || mismatch) }
-' BiteLens.xcodeproj/project.pbxproj; then
+' "${2:-BiteLens.xcodeproj/project.pbxproj}"; then
     echo "The tag must match MARKETING_VERSION for every Xcode target." >&2
     exit 1
 fi
