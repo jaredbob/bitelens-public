@@ -408,6 +408,111 @@ private struct FailingDeletionStore: SessionStore {
     #expect(reopened.pendingObservationChanges.map(\.id) == [urge.id])
 }
 
+@MainActor @Test func betaAppleHealthConnectionKeepsBothOptInsWithOneAccountAfterReopening() async throws {
+    let storage = try TestStorage()
+    defer { try? FileManager.default.removeItem(at: storage.directory) }
+    let accounts = BetaAccountFixtures(first: ownerID, second: UUID())
+    let meals = TestAppleHealthClient()
+    let symptoms = TestObservationHealthClient()
+    func openBeta() -> MealWorkflow {
+        MealWorkflow(auth: accounts, sessionStore: storage, betaApproval: accounts,
+                     accountDirectory: storage.directory.appendingPathComponent("Accounts"),
+                     accountPreferences: { _ in storage }, now: { instant }, appleHealth: meals,
+                     observationAppleHealth: symptoms)
+    }
+
+    let workflow = openBeta()
+    await workflow.signIn(email: "first@example.com", password: "correct")
+    #expect(workflow.appleHealthConnectionStatus == .readyToConnect)
+    #expect(!workflow.appleHealthSyncEnabled)
+    #expect(!workflow.appleHealthSymptomSharingEnabled)
+    #expect(await meals.requestedNutrients.isEmpty)
+    #expect(await symptoms.writeAccessRequests.isEmpty)
+
+    let draft = try workflow.startManualDraft()
+    try workflow.updateDraftItems(draft.id, items: [MealItem(name: "Dinner",
+        nutrients: NutrientAmounts(caloriesKcal: 130, alcoholGrams: 21))])
+    let meal = try workflow.confirmMeal(draft.id)
+    let unsharedSymptom = try workflow.logSymptom(.nausea)
+    await workflow.setAppleHealthSymptomSharingEnabled(true)
+    #expect(workflow.appleHealthConnectionStatus == .connected)
+    #expect(!workflow.appleHealthSyncEnabled)
+
+    await accounts.setApproved(false, for: ownerID)
+    await accounts.setOnline(false)
+    let symptom = try workflow.logSymptom(.headache)
+    let urge = try workflow.logUrge(mealID: meal.id)
+    await workflow.syncPendingObservationAppleHealthChanges()
+    #expect(Set(await symptoms.samples.map(\.observationID)) == [symptom.id, urge.id])
+    #expect(await symptoms.samples.first { $0.observationID == urge.id }?.value == 3)
+    await workflow.setAppleHealthSyncEnabled(true)
+    #expect(await meals.samples.isEmpty)
+    #expect(try await workflow.backfillAppleHealth() == 1)
+    await workflow.syncPendingAppleHealthChanges()
+    #expect(await meals.samples.first { $0.nutrient == .alcohol }?.amount == 1.5)
+
+    let reopened = openBeta()
+    reopened.restoreSession()
+    #expect(reopened.appleHealthConnectionStatus == .connected)
+    #expect(reopened.appleHealthSyncEnabled)
+    #expect(reopened.appleHealthSymptomSharingEnabled)
+    #expect(reopened.loggedObservations.contains(unsharedSymptom))
+    await reopened.setAppleHealthSyncEnabled(false)
+    await reopened.setAppleHealthSymptomSharingEnabled(false)
+    await reopened.signOut()
+
+    await accounts.setOnline(true)
+    let other = openBeta()
+    await other.signIn(email: "second@example.com", password: "correct")
+    #expect(other.appleHealthConnectionStatus == .connectedToAnotherAccount)
+    await other.setAppleHealthSyncEnabled(true)
+    await other.setAppleHealthSymptomSharingEnabled(true)
+    #expect(!other.appleHealthSyncEnabled)
+    #expect(!other.appleHealthSymptomSharingEnabled)
+    let otherSymptom = try other.logSymptom(.headache)
+    await other.syncPendingObservationAppleHealthChanges()
+    #expect(!otherSymptom.appleHealthEligible)
+    #expect(Set(await symptoms.samples.map(\.observationID)) == [symptom.id, urge.id])
+    #expect(Set(await meals.samples.map(\.mealID)) == [meal.id])
+
+    await accounts.setApproved(true, for: ownerID)
+    await other.signIn(email: "first@example.com", password: "correct")
+    #expect(other.appleHealthConnectionStatus == .connected)
+    #expect(!other.appleHealthSyncEnabled)
+    #expect(!other.appleHealthSymptomSharingEnabled)
+}
+
+@MainActor @Test func betaAppleHealthDeletionWaitsForTheConnectedAccountToReturn() async throws {
+    let storage = try TestStorage()
+    defer { try? FileManager.default.removeItem(at: storage.directory) }
+    let accounts = BetaAccountFixtures(first: ownerID, second: UUID())
+    let health = TestObservationHealthClient()
+    let workflow = MealWorkflow(auth: accounts, sessionStore: storage, betaApproval: accounts,
+                                accountDirectory: storage.directory.appendingPathComponent("Accounts"),
+                                accountPreferences: { _ in storage }, now: { instant },
+                                observationAppleHealth: health)
+    await workflow.signIn(email: "first@example.com", password: "correct")
+    await workflow.setAppleHealthSymptomSharingEnabled(true)
+    let symptom = try workflow.logSymptom(.headache)
+    await workflow.syncPendingObservationAppleHealthChanges()
+    #expect(await health.samples.map(\.observationID) == [symptom.id])
+
+    await health.pauseNextWriteAccess()
+    try workflow.deleteObservation(symptom.id)
+    await health.waitForPausedWriteAccess()
+    await workflow.signOut()
+    await workflow.signIn(email: "second@example.com", password: "correct")
+    #expect(workflow.appleHealthConnectionStatus == .connectedToAnotherAccount)
+    await health.resumeWriteAccess()
+    await workflow.syncPendingObservationAppleHealthChanges()
+    #expect(await health.samples.map(\.observationID) == [symptom.id])
+
+    await workflow.signIn(email: "first@example.com", password: "correct")
+    #expect(workflow.appleHealthSymptomSharingEnabled)
+    await workflow.syncPendingObservationAppleHealthChanges()
+    #expect(await health.samples.isEmpty)
+}
+
 @MainActor @Test func betaShareStaysWithTheAccountActiveBeforeTheImageFinishesLoading() async throws {
     let storage = try TestStorage()
     defer { try? FileManager.default.removeItem(at: storage.directory) }

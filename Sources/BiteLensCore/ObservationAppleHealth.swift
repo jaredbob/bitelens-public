@@ -64,6 +64,7 @@ public struct ObservationAppleHealthSample: Codable, Equatable, Sendable {
 /// Eligibility and HealthKit acknowledgments are committed alongside local observations.
 struct ObservationAppleHealthState: Codable {
     var entries: [UUID: Entry] = [:]
+    var authorizationPending: Bool?
 
     struct Entry: Codable {
         let category: Symptom
@@ -94,20 +95,24 @@ struct ObservationAppleHealthState: Codable {
 
 extension MealWorkflow {
     public var appleHealthSymptomSharingEnabled: Bool {
-        !isBeta && access == .owner && localMealsLoaded && localMeals.appleHealthSymptomSharingEnabled
+        appleHealthConnectionStatus == .connected && localMeals.appleHealthSymptomSharingEnabled
     }
 
     public func setAppleHealthSymptomSharingEnabled(_ enabled: Bool) async {
-        guard !isBeta, access == .owner, localMealsLoaded, enabled != appleHealthSymptomSharingEnabled else { return }
+        let wasReadyToConnect = appleHealthConnectionStatus == .readyToConnect
+        guard enabled != appleHealthSymptomSharingEnabled,
+              (!isBeta || observationAppleHealth != nil), prepareAppleHealthOptIn(enabled) else { return }
         var updated = localMeals
         updated.appleHealthSymptomSharingEnabled = enabled
+        updated.observationAppleHealth.authorizationPending = enabled ? true : nil
         do { try saveLocalMeals(updated) }
         catch {
             issue = .storageUnavailable
             return
         }
         guard enabled else { return }
-        scheduleObservationAppleHealthSync(requestAuthorization: true)
+        if wasReadyToConnect { scheduleAppleHealthSync() }
+        scheduleObservationAppleHealthSync()
         await observationAppleHealthTask?.value
     }
 
@@ -116,37 +121,42 @@ extension MealWorkflow {
         await observationAppleHealthTask?.value
     }
 
-    func scheduleObservationAppleHealthSync(requestAuthorization: Bool = false) {
+    func scheduleObservationAppleHealthSync() {
         guard appleHealthSymptomSharingEnabled, let observationAppleHealth else { return }
         needsObservationAppleHealthPass = true
-        shouldRequestObservationAppleHealthAuthorization =
-            shouldRequestObservationAppleHealthAuthorization || requestAuthorization
         guard observationAppleHealthTask == nil else { return }
         observationAppleHealthTask = Task {
             while needsObservationAppleHealthPass {
                 needsObservationAppleHealthPass = false
-                let requestAuthorization = shouldRequestObservationAppleHealthAuthorization
-                shouldRequestObservationAppleHealthAuthorization = false
-                await exportPendingObservations(using: observationAppleHealth, requestAuthorization: requestAuthorization)
+                await exportPendingObservations(using: observationAppleHealth, activation: accountActivationID)
             }
             observationAppleHealthTask = nil
         }
     }
 
-    private func exportPendingObservations(using client: any ObservationAppleHealthClient,
-                                           requestAuthorization: Bool) async {
+    private func exportPendingObservations(using client: any ObservationAppleHealthClient, activation: UUID) async {
         guard appleHealthSymptomSharingEnabled, await client.isAvailable() else { return }
-        if requestAuthorization, appleHealthSymptomSharingEnabled {
-            // If the request fails, existing write grants can still be used.
-            try? await client.requestWriteAccess(for: Set(Symptom.allCases))
+        guard isAppleHealthActivationCurrent(activation), appleHealthSymptomSharingEnabled else { return }
+        if localMeals.observationAppleHealth.authorizationPending == true {
+            do {
+                try await client.requestWriteAccess(for: Set(Symptom.allCases))
+                guard isAppleHealthActivationCurrent(activation), appleHealthSymptomSharingEnabled else { return }
+                var updated = localMeals
+                updated.observationAppleHealth.authorizationPending = nil
+                try saveLocalMeals(updated)
+            } catch {
+                // Keep the request pending. Existing write grants can still be used.
+            }
         }
-        guard appleHealthSymptomSharingEnabled else { return }
+        guard isAppleHealthActivationCurrent(activation), appleHealthSymptomSharingEnabled else { return }
         let observations = localMeals.loggedObservations.filter { $0.record.ownerID == activeAccountID }
         let byID = Dictionary(uniqueKeysWithValues: observations.map { ($0.id, $0) })
         for (id, entry) in localMeals.observationAppleHealth.entries {
             let observation = byID[id]
             let sample = observation.flatMap(ObservationAppleHealthSample.init)
-            guard entry.needsSync(for: sample), isCurrentHealthObservation(id, revision: observation?.revision) else { continue }
+            guard isAppleHealthActivationCurrent(activation) else { return }
+            guard entry.needsSync(for: sample),
+                  isCurrentHealthObservation(id, revision: observation?.revision, activation: activation) else { continue }
             do {
                 if sample == nil {
                     switch entry.outcome {
@@ -158,8 +168,11 @@ extension MealWorkflow {
                 }
 
                 let access = await client.writeAccess(for: entry.category)
-                guard access == .authorized, isCurrentHealthObservation(id, revision: observation?.revision) else { continue }
-                try await reconcileObservationHealthSample(sample, id: id, entry: entry, using: client)
+                guard isAppleHealthActivationCurrent(activation) else { return }
+                guard access == .authorized,
+                      isCurrentHealthObservation(id, revision: observation?.revision, activation: activation) else { continue }
+                try await reconcileObservationHealthSample(sample, id: id, entry: entry,
+                                                           using: client, activation: activation)
             } catch {
                 // The durable outcome stays pending for the next pass. Work on other
                 // categories can continue when this category is unavailable.
@@ -168,19 +181,20 @@ extension MealWorkflow {
         }
     }
 
-    private func isCurrentHealthObservation(_ id: UUID, revision: Int?) -> Bool {
-        appleHealthSymptomSharingEnabled &&
+    private func isCurrentHealthObservation(_ id: UUID, revision: Int?, activation: UUID) -> Bool {
+        isAppleHealthActivationCurrent(activation) && appleHealthSymptomSharingEnabled &&
             localMeals.loggedObservations.first { $0.id == id && $0.record.ownerID == activeAccountID }?.revision == revision
     }
 
     private func reconcileObservationHealthSample(_ sample: ObservationAppleHealthSample?, id: UUID,
                                                   entry: ObservationAppleHealthState.Entry,
-                                                  using client: any ObservationAppleHealthClient) async throws {
+                                                  using client: any ObservationAppleHealthClient,
+                                                  activation: UUID) async throws {
         let storedRevision: Int?
         switch entry.outcome {
         case .writing, .written:
             storedRevision = try await client.ownSampleRevision(observationID: id, category: entry.category)
-            guard isCurrentHealthObservation(id, revision: sample?.revision) else { return }
+            guard isCurrentHealthObservation(id, revision: sample?.revision, activation: activation) else { return }
         case .pending, .suppressed:
             storedRevision = nil
         }
@@ -189,6 +203,7 @@ extension MealWorkflow {
             if storedRevision != nil {
                 try await client.deleteOwnSamples(observationID: id, category: entry.category)
             }
+            guard isAppleHealthActivationCurrent(activation) else { return }
             try saveObservationHealthOutcome(nil, id: id)
             return
         }
@@ -201,7 +216,7 @@ extension MealWorkflow {
             // A first write can commit before its acknowledgment reaches the app.
             let wasDeleted = try await client.hasOwnSampleDeletion(observationID: id, category: entry.category,
                                                                    revision: attempted.revision)
-            guard isCurrentHealthObservation(id, revision: sample.revision) else { return }
+            guard isCurrentHealthObservation(id, revision: sample.revision, activation: activation) else { return }
             if wasDeleted {
                 try saveObservationHealthOutcome(.suppressed, id: id)
                 return
@@ -216,6 +231,7 @@ extension MealWorkflow {
         try await client.save(sample)
         // An edit or deletion during the write is reconciled against this acknowledgment
         // in the next pass, even when sharing was turned off during the write.
+        guard isAppleHealthActivationCurrent(activation) else { return }
         try saveObservationHealthOutcome(.written(sample), id: id)
     }
 

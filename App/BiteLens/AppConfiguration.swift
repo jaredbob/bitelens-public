@@ -33,6 +33,7 @@ enum AppConfiguration {
         guard let supabase else { return nil }
         let service = (Bundle.main.bundleIdentifier ?? "com.example.BiteLens") + ".auth"
         let auth = SupabaseAuthenticationClient(configuration: supabase)
+        let healthKit = HealthKitClient()
         #if BITELENS_BETA
         return MealWorkflow(auth: auth,
                             sessionStore: KeychainSessionStore(service: service),
@@ -42,11 +43,12 @@ enum AppConfiguration {
                             analysis: SupabaseMealAnalysisClient(configuration: supabase),
                             mealSync: SupabaseMealSyncClient(configuration: supabase),
                             sharedImageInbox: .appGroup(requiresAccount: true),
-                            observationSync: SupabaseObservationSyncClient(configuration: supabase))
+                            appleHealth: healthKit,
+                            observationSync: SupabaseObservationSyncClient(configuration: supabase),
+                            observationAppleHealth: healthKit)
         #else
         guard let owner = setting("BiteLensOwnerID"),
               let approvedOwnerID = UUID(uuidString: owner) else { return nil }
-        let healthKit = HealthKitClient()
         return MealWorkflow(auth: auth,
                      sessionStore: KeychainSessionStore(service: service),
                      preferences: UserDefaultsProviderPreferences(),

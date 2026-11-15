@@ -117,16 +117,16 @@ public enum WorkflowIssue: Error, Equatable, Sendable {
     let observationAppleHealth: (any ObservationAppleHealthClient)?
     @ObservationIgnored var observationAppleHealthTask: Task<Void, Never>?
     @ObservationIgnored var needsObservationAppleHealthPass = false
-    @ObservationIgnored var shouldRequestObservationAppleHealthAuthorization = false
     let observationSync: (any ObservationSyncClient)?
     @ObservationIgnored var observationSyncGeneration: Int?
     @ObservationIgnored var mealSyncGeneration: Int?
     let appleHealth: (any AppleHealthClient)?
+    var betaAppleHealthAccount: BetaAppleHealthAccount = .unavailable
     var appleHealthWriteAccess: AppleHealthSyncStatus.WriteAccess = .checking
     @ObservationIgnored var appleHealthSyncTask: Task<Void, Never>?
     @ObservationIgnored var needsAppleHealthSyncPass = false
     @ObservationIgnored var shouldRequestAppleHealthAuthorization = false
-    @ObservationIgnored var isRequestingAppleHealthAuthorization = false
+    @ObservationIgnored var appleHealthAuthorizationActivation: UUID?
 
     public convenience init(auth: any AuthenticationClient, sessionStore: any SessionStore,
                             preferences: any ProviderPreferences, approvedOwnerID: UUID,
@@ -153,11 +153,14 @@ public enum WorkflowIssue: Error, Equatable, Sendable {
                             analysis: (any MealAnalysisClient)? = nil,
                             mealSync: (any MealSyncClient)? = nil,
                             sharedImageInbox: SharedMealImageInbox? = nil,
-                            observationSync: (any ObservationSyncClient)? = nil) {
+                            appleHealth: (any AppleHealthClient)? = nil,
+                            observationSync: (any ObservationSyncClient)? = nil,
+                            observationAppleHealth: (any ObservationAppleHealthClient)? = nil) {
         self.init(auth: auth, sessionStore: sessionStore, preferences: nil, betaApproval: betaApproval,
                   accountDirectory: accountDirectory, accountPreferences: accountPreferences,
                   activeAccountChanged: activeAccountChanged, now: now, analysis: analysis,
-                  mealSync: mealSync, sharedImageInbox: sharedImageInbox, observationSync: observationSync)
+                  mealSync: mealSync, sharedImageInbox: sharedImageInbox, appleHealth: appleHealth,
+                  observationSync: observationSync, observationAppleHealth: observationAppleHealth)
     }
 
     private init(auth: any AuthenticationClient, sessionStore: any SessionStore,
@@ -275,6 +278,8 @@ public enum WorkflowIssue: Error, Equatable, Sendable {
         if isBeta {
             clearAccountState()
             activeAccountChanged?(nil)
+        } else {
+            resetAppleHealthWork()
         }
         cloudStatus = .signedOut
         issue = nil
@@ -364,6 +369,7 @@ public enum WorkflowIssue: Error, Equatable, Sendable {
     }
 
     private func clearAccountState() {
+        resetAppleHealthWork()
         draftStorage = nil
         preferences = nil
         selectedProvider = nil
@@ -374,6 +380,15 @@ public enum WorkflowIssue: Error, Equatable, Sendable {
         analyzingDraftIDs.removeAll()
         photoCleanupEvaluatedAt = .distantPast
         scheduledPhotoExpiration = nil
+    }
+
+    private func resetAppleHealthWork() {
+        // An outstanding HealthKit operation can finish. Its pass checks the
+        // activation before doing more work or saving a local acknowledgment.
+        appleHealthWriteAccess = .checking
+        needsAppleHealthSyncPass = false
+        shouldRequestAppleHealthAuthorization = false
+        needsObservationAppleHealthPass = false
     }
 
     func requireCloudReauthentication() {

@@ -8,7 +8,7 @@ From a current bitelens-public checkout with GitHub CLI signed in, pass the prop
 tag and the full commit SHA you intend to release:
 
 ```sh
-scripts/check-release-ready.sh v0.5.0 FULL_COMMIT_SHA
+scripts/check-release-ready.sh v0.6.0 FULL_COMMIT_SHA
 ```
 
 The command checks that the commit is on protected `main`, its push to `main`
@@ -54,7 +54,7 @@ Apply the full migration chain to your beta project and verify the applied migra
 Deploy the public privacy policy to BiteLens Beta. This function serves plain text and needs no API key or user session. From the release source, run this command with Supabase CLI 3.0.0.
 
 ```bash
-supabase functions deploy beta-privacy --remote=YOUR_BETA_PROJECT_REF --no-verify-jwt --use-api
+supabase functions deploy beta-privacy --remote=YOUR_BETA_PROJECT_REF --no-verify-jwt --use-api --yes
 ```
 
 Append `/functions/v1/beta-privacy` to your beta project URL and open it in a signed-out browser and from the beta's sign-in and Settings screens. Enter the same public URL in App Store Connect. Review the beta's App Privacy responses against its actual account, meal, observation, and optional analysis data collection. [App Review privacy guidelines](https://developer.apple.com/app-store/review/guidelines/#privacy) · [App Privacy details](https://developer.apple.com/app-store/app-privacy-details/)
@@ -65,17 +65,18 @@ Append `/functions/v1/beta-privacy` to your beta project URL and open it in a si
 - With both providers, verify permission before sending a Meal Estimate and after withdrawal in Settings. Check that manual logging and sync work without AI permission and at the limit. Exercise the shared daily allowance, concurrent requests, and the UTC reset.
 - With valid tokens for an unapproved and a revoked account, verify that cloud reads, writes, and analysis are blocked. Check that approval revocation preserves records and an active local record remains available until sign-out. Fresh sign-in requires approval.
 - Install the beta alongside the personal app on an iPhone. Switch between the two beta accounts and verify that drafts, images, history, preferences, and pending uploads stay with their original account, including through offline use and sign-out. Check that a fresh beta installation starts with an empty local history.
-- Share a synthetic Meal Image into the beta. Check that it stays with the account active during sharing, follows the existing seven-day expiry, and cannot be claimed after switching accounts. Share while signed out to verify the instruction to sign in and share again. Check that the beta offers no Apple Health export.
+- Share a synthetic Meal Image into the beta. Check that it stays with the account active during sharing, follows the existing seven-day expiry, and cannot be claimed after switching accounts. Share while signed out to verify the instruction to sign in and share again.
+- Verify optional meal and observation exports and account switching on an iPhone using the [Apple Health Sync test guide](testing/apple-health-sync.md).
 
 ### Archive, upload, and submit
 
 1. Merge the release changes to main and run the pre-publish check above on the release commit. Publish an immutable prerelease using the checked tag and full SHA, then wait for the release-triggered **BiteLens CI** to pass.
-2. Confirm the App Group is assigned to the beta app and Share extension App IDs. Choose an unused build number for the version. To archive the exact verified release with a public-facing support address, run the command below with the paid team ID and the approved support address. The support address is visible in the beta app. With no support address configured, the app directs testers to Send Beta Feedback in TestFlight.
+2. Confirm the App Group is assigned to the beta app and Share extension App IDs. Enable HealthKit on the beta app App ID and verify the provisioning profile includes it. Choose an unused build number for the version. To archive the exact verified release with a public-facing support address, run the command below with the paid team ID and the approved support address. The support address is visible in the beta app. With no support address configured, the app directs testers to Send Beta Feedback in TestFlight.
 3. Open the archive in Xcode Organizer and use **Distribute App → TestFlight & App Store** to upload a build eligible for external TestFlight. Wait for processing and resolve any export-compliance questions. [Xcode distribution](https://developer.apple.com/documentation/xcode/distributing-your-app-for-beta-testing-and-releases/)
 4. Create an external TestFlight group on the BiteLens Beta record. Fill in the [beta metadata](testflight-beta-notes.md) and provide a feedback email. Enter the App Review contact name, email, international-format phone number, and credentials for a separate approved reviewer account with an empty record. Keep those credentials in App Store Connect.
 5. Add the build to the group, enter What to Test, and submit it for TestFlight App Review. Wait for approval before adding or notifying external testers. [Apple's external testing instructions](https://developer.apple.com/help/app-store-connect/test-a-beta-version/invite-external-testers/)
 
 ```bash
 BITELENS_BETA_SUPPORT_EMAIL=beta-support@example.com \
-  scripts/archive-testflight.sh --beta v0.5.0 1 YOUR_APPLE_TEAM_ID
+  scripts/archive-testflight.sh --beta v0.6.0 1 YOUR_APPLE_TEAM_ID
 ```

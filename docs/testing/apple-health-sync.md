@@ -2,7 +2,9 @@
 
 Use a signed build on a physical iPhone and disposable meals. Enable HealthKit
 for the BiteLens app identifier and use a development provisioning profile that
-includes the capability. Install and launch the BiteLens scheme with Xcode.
+includes the capability. Install and launch the BiteLens or BiteLens Beta scheme
+with Xcode. Use the corresponding app name in the Health app. For Beta, sign in
+and confirm the Apple Health Connection when turning on the first toggle.
 [Configuring HealthKit access](https://developer.apple.com/documentation/xcode/configuring-healthkit-access)
 
 ## Confirming a meal
@@ -142,3 +144,21 @@ under **Health → Browse → Symptoms → Show All Data**.
    and save a symptom. Verify that only the meal nutrient totals appear.
    With meal sync off and symptom sharing on, verify that a newly eligible
    symptom still exports.
+
+## BiteLens Beta account switching
+
+1. On a fresh Beta installation, sign in to the first of two approved test
+   accounts. Verify both toggles start off. Cancel the connection prompt and
+   confirm both toggles stay off. Connect and enable both exports, then log a
+   meal and a symptom offline. Verify their authorized samples appear from
+   BiteLens Beta in Health.
+2. Turn off both toggles. Edit the exported meal and delete the exported symptom.
+   Sign out, then sign in to the second account. Verify Settings says another
+   account is connected to Apple Health. Log a meal and a symptom and verify
+   the new entries are absent in Health and the first account’s samples persist.
+3. Sign back in to the first account. Verify both toggles are still off and
+   turn them on. Check that the pending meal correction and symptom deletion
+   appear in Health. Run **Sync Last 30 Days** and verify it only backfills
+   the first account’s recent Logged Meals.
+4. With the personal build installed alongside Beta, check that changing a
+   Beta meal only updates the Beta sample. Each app has its own source in Health.

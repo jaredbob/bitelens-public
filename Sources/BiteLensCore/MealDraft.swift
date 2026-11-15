@@ -167,6 +167,7 @@ extension MealWorkflow {
             sharedStorageUnavailable = true
         }
         guard let draftStorage else { return }
+        loadBetaAppleHealthAccount()
         localMealsLoaded = false
         let restored: LocalMealLibrary
         do { restored = try draftStorage.load() }

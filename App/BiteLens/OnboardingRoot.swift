@@ -202,19 +202,8 @@ struct SettingsView: View {
                         }
                     }
                 }
-            } else {
-                AppleHealthSettings(workflow: workflow)
-                Section {
-                    Toggle("Share symptoms with Apple Health", isOn: Binding(
-                        get: { workflow.appleHealthSymptomSharingEnabled },
-                        set: { enabled in
-                            Task { await workflow.setAppleHealthSymptomSharingEnabled(enabled) }
-                        }
-                    ))
-                } footer: {
-                    Text("Applies to symptoms first saved while sharing is on. Manage write access for each symptom type in the Health app.")
-                }
             }
+            AppleHealthSharingSettings(workflow: workflow, activation: workflow.accountActivationID)
             Section("Account") {
                 Button("Sign in again") { showSignIn = true }
                 Button("Sign out", role: .destructive) { confirmSignOut = true }
@@ -237,39 +226,104 @@ struct SettingsView: View {
     }
 }
 
+private struct AppleHealthSharingSettings: View {
+    private enum Feature {
+        case meals, symptoms
+    }
+
+    let workflow: MealWorkflow
+    let activation: UUID
+    @State private var confirmConnection = false
+    @State private var pendingOptIn: Feature?
+
+    var body: some View {
+        switch workflow.appleHealthConnectionStatus {
+        case .unavailable:
+            if workflow.isBeta {
+                Section("Apple Health") { Text("Apple Health settings are unavailable.") }
+            }
+        case .connectedToAnotherAccount:
+            Section("Apple Health") {
+                Text("Another BiteLens account is connected to Apple Health in this installation.")
+            }
+        case .readyToConnect, .connected:
+            AppleHealthSettings(workflow: workflow, syncEnabled: Binding(
+                get: { workflow.appleHealthSyncEnabled },
+                set: { setEnabled($0, for: .meals) }
+            ))
+            Section {
+                Toggle("Share symptoms with Apple Health", isOn: Binding(
+                    get: { workflow.appleHealthSymptomSharingEnabled },
+                    set: { setEnabled($0, for: .symptoms) }
+                ))
+            } footer: {
+                Text("Applies to symptoms first saved while sharing is on. Manage write access for each symptom type in the Health app.")
+            }
+            .alert("Connect to Apple Health?", isPresented: $confirmConnection, presenting: pendingOptIn) { feature in
+                Button("Connect") { updateSharing(true, for: feature) }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("Connect only if this is your Health record. This BiteLens account will be the only account that can share with Apple Health from this installation.")
+            }
+        }
+    }
+
+    private func setEnabled(_ enabled: Bool, for feature: Feature) {
+        if enabled, workflow.appleHealthConnectionStatus == .readyToConnect {
+            pendingOptIn = feature
+            confirmConnection = true
+        } else {
+            updateSharing(enabled, for: feature)
+        }
+    }
+
+    private func updateSharing(_ enabled: Bool, for feature: Feature) {
+        Task {
+            guard workflow.accountActivationID == activation else { return }
+            switch feature {
+            case .meals: await workflow.setAppleHealthSyncEnabled(enabled)
+            case .symptoms: await workflow.setAppleHealthSymptomSharingEnabled(enabled)
+            }
+        }
+    }
+}
+
 private struct AppleHealthSettings: View {
     let workflow: MealWorkflow
+    let syncEnabled: Binding<Bool>
     @State private var backfillInProgress = false
     @State private var backfillMessage: String?
 
     var body: some View {
         let status = workflow.appleHealthSyncStatus
         Section {
-            Toggle("Apple Health Sync", isOn: Binding(get: { workflow.appleHealthSyncEnabled }, set: { enabled in
-                Task { await workflow.setAppleHealthSyncEnabled(enabled) }
-            }))
-            LabeledContent("Sync status", value: syncSummary(status))
-            Button("Retry Sync") {
-                Task { await workflow.retryAppleHealthSync() }
-            }
-            .disabled(!workflow.appleHealthSyncEnabled || !status.hasPendingWork)
-            Button("Sync Last 30 Days", action: backfill)
-                .disabled(!workflow.appleHealthSyncEnabled || backfillInProgress)
-            if let backfillMessage {
-                Text(backfillMessage).foregroundStyle(.secondary)
+            Toggle("Apple Health Sync", isOn: syncEnabled)
+            if workflow.appleHealthConnectionStatus == .connected {
+                LabeledContent("Sync status", value: syncSummary(status))
+                Button("Retry Sync") {
+                    Task { await workflow.retryAppleHealthSync() }
+                }
+                .disabled(!workflow.appleHealthSyncEnabled || !status.hasPendingWork)
+                Button("Sync Last 30 Days", action: backfill)
+                    .disabled(!workflow.appleHealthSyncEnabled || backfillInProgress)
+                if let backfillMessage {
+                    Text(backfillMessage).foregroundStyle(.secondary)
+                }
             }
         } footer: {
             Text("BiteLens shares nutrition and alcohol intake from eligible meals. Turning sync off keeps entries already in Health.")
         }
-        Section {
-            ForEach(Nutrient.allCases.filter(AppleHealthSample.supportedNutrients.contains), id: \.self) { nutrient in
-                LabeledContent(nutrient == .fat ? "Total fat" : nutrient.title,
-                               value: writeAccessLabel(status.writeAccess, for: nutrient))
+        if workflow.appleHealthConnectionStatus == .connected {
+            Section {
+                ForEach(Nutrient.allCases.filter(AppleHealthSample.supportedNutrients.contains), id: \.self) { nutrient in
+                    LabeledContent(nutrient == .fat ? "Total fat" : nutrient.title,
+                                   value: writeAccessLabel(status.writeAccess, for: nutrient))
+                }
+            } header: {
+                Text("Apple Health write access")
+            } footer: {
+                Text("Manage write access in the Health app.")
             }
-        } header: {
-            Text("Apple Health write access")
-        } footer: {
-            Text("Manage write access for BiteLens in the Health app.")
         }
     }
 
