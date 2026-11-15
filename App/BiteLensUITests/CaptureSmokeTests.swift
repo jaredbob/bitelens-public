@@ -135,13 +135,20 @@ final class CaptureSmokeTests: XCTestCase {
         pendingDrafts.tap()
         app.staticTexts["Meal draft"].tap()
 
-        openMealPhotoShareSheet(in: app)
+        let sharePreview = openMealPhotoShareSheet(in: app)
         // Tap above the share sheet to dismiss it without invoking a share action.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
-        app.buttons["Close image"].tap()
+        XCTAssertTrue(sharePreview.waitForNonExistence(timeout: 8), "The share sheet should dismiss")
+
+        let closeImage = app.buttons["Close image"]
+        XCTAssertTrue(waitForHittable(closeImage, timeout: 8), "Close image should be tappable after sharing")
+        closeImage.tap()
+        XCTAssertTrue(closeImage.waitForNonExistence(timeout: 8), "The photo viewer should dismiss")
+        XCTAssertTrue(app.navigationBars["Meal draft"].waitForExistence(timeout: 8))
 
         let confirm = app.buttons["confirm-meal"]
         reveal(confirm, in: app)
+        XCTAssertTrue(confirm.exists && confirm.isHittable, "Confirm meal should be visible in the draft")
         XCTAssertTrue(confirm.isEnabled)
         confirm.tap()
         XCTAssertTrue(app.navigationBars["Pending drafts"].waitForExistence(timeout: 8))
@@ -193,7 +200,8 @@ final class CaptureSmokeTests: XCTestCase {
         XCTAssertTrue(app.buttons["urge-chip"].waitForExistence(timeout: 8))
     }
 
-    private func openMealPhotoShareSheet(in app: XCUIApplication) {
+    @discardableResult
+    private func openMealPhotoShareSheet(in app: XCUIApplication) -> XCUIElement {
         let photo = app.buttons["View meal image full screen"]
         XCTAssertTrue(photo.waitForExistence(timeout: 8))
         photo.tap()
@@ -203,6 +211,7 @@ final class CaptureSmokeTests: XCTestCase {
         share.tap()
         let sharePreview = app.descendants(matching: .any)["Meal photo"].firstMatch
         XCTAssertTrue(sharePreview.waitForExistence(timeout: 8))
+        return sharePreview
     }
 
     private func launchUITestMode(arguments: [String] = []) -> XCUIApplication {
