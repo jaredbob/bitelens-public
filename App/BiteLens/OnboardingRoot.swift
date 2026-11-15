@@ -247,7 +247,10 @@ private struct AppleHealthSharingSettings: View {
                 Text("Another BiteLens account is connected to Apple Health in this installation.")
             }
         case .readyToConnect, .connected:
-            AppleHealthSettings(workflow: workflow, setEnabled: { setEnabled($0, for: .meals) })
+            AppleHealthSettings(workflow: workflow, syncEnabled: Binding(
+                get: { workflow.appleHealthSyncEnabled },
+                set: { setEnabled($0, for: .meals) }
+            ))
             Section {
                 Toggle("Share symptoms with Apple Health", isOn: Binding(
                     get: { workflow.appleHealthSymptomSharingEnabled },
@@ -287,14 +290,14 @@ private struct AppleHealthSharingSettings: View {
 
 private struct AppleHealthSettings: View {
     let workflow: MealWorkflow
-    let setEnabled: @MainActor @Sendable (Bool) -> Void
+    let syncEnabled: Binding<Bool>
     @State private var backfillInProgress = false
     @State private var backfillMessage: String?
 
     var body: some View {
         let status = workflow.appleHealthSyncStatus
         Section {
-            Toggle("Apple Health Sync", isOn: Binding(get: { workflow.appleHealthSyncEnabled }, set: setEnabled))
+            Toggle("Apple Health Sync", isOn: syncEnabled)
             if workflow.appleHealthConnectionStatus == .connected {
                 LabeledContent("Sync status", value: syncSummary(status))
                 Button("Retry Sync") {
