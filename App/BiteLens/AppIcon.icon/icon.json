@@ -1,0 +1,20 @@
+{
+  "fill": {
+    "automatic-gradient": "extended-srgb:0.29020,0.10196,0.13333,1.00000"
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "BiteLens.svg",
+          "name": "BiteLens mark"
+        }
+      ]
+    }
+  ],
+  "supported-platforms": {
+    "squares": [
+      "iOS"
+    ]
+  }
+}

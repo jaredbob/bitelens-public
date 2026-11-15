@@ -1,0 +1,12 @@
+// Copy to Local.xcconfig. Configure the build you intend to run.
+// DEVELOPMENT_TEAM = YOUR_TEAM_ID
+// BITELENS_IDENTIFIER_PREFIX = com.example
+//
+// Hosts omit the https scheme. Use only Supabase publishable keys here.
+// BITELENS_PERSONAL_SUPABASE_HOST = your-personal-project.supabase.co
+// BITELENS_PERSONAL_SUPABASE_PUBLISHABLE_KEY = YOUR_PUBLISHABLE_KEY
+// BITELENS_OWNER_ID = YOUR_AUTH_USER_UUID
+//
+// BITELENS_BETA_SUPABASE_HOST = your-beta-project.supabase.co
+// BITELENS_BETA_SUPABASE_PUBLISHABLE_KEY = YOUR_PUBLISHABLE_KEY
+// BITELENS_BETA_SUPPORT_EMAIL = beta-support@example.com

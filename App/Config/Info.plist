@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleDisplayName</key><string>$(BITELENS_DISPLAY_NAME)</string>
+<key>CFBundleDocumentTypes</key>
+<array>
+    <dict>
+        <key>CFBundleTypeName</key><string>Meal Image</string>
+        <key>CFBundleTypeRole</key><string>Viewer</string>
+        <key>LSHandlerRank</key><string>Alternate</string>
+        <key>LSItemContentTypes</key><array><string>public.image</string></array>
+    </dict>
+</array>
+<key>BiteLensAppGroup</key><string>$(BITELENS_APP_GROUP)</string>
+<key>BiteLensURLScheme</key><string>$(BITELENS_URL_SCHEME)</string>
+<key>BiteLensBetaSupportEmail</key><string>$(BITELENS_BETA_SUPPORT_EMAIL)</string>
+<key>BiteLensSupabaseHost</key><string>$(BITELENS_SUPABASE_HOST)</string>
+<key>BiteLensSupabasePublishableKey</key><string>$(BITELENS_SUPABASE_PUBLISHABLE_KEY)</string>
+<key>BiteLensOwnerID</key><string>$(BITELENS_OWNER_ID)</string>
+<key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
+<key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+<key>CFBundleName</key><string>$(PRODUCT_NAME)</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>
+<key>CFBundleURLTypes</key>
+<array>
+    <dict>
+        <key>CFBundleURLName</key><string>$(BITELENS_URL_SCHEME).shared-image</string>
+        <key>CFBundleURLSchemes</key><array><string>$(BITELENS_URL_SCHEME)</string></array>
+    </dict>
+</array>
+<key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
+<key>ITSAppUsesNonExemptEncryption</key><false/>
+<key>LSRequiresIPhoneOS</key><true/>
+<key>LSSupportsOpeningDocumentsInPlace</key><true/>
+<key>NSCameraUsageDescription</key><string>BiteLens uses the camera to capture meal photos for your private food record.</string>
+<key>NSHealthShareUsageDescription</key><string>BiteLens checks its own entries to keep them up to date.</string>
+<key>NSHealthUpdateUsageDescription</key><string>BiteLens can share meal nutrient totals, symptoms, and increased appetite from binge-eating urges with Apple Health. You choose what to share in BiteLens Settings.</string>
+<key>UILaunchScreen</key><dict/>
+<key>UIApplicationSceneManifest</key><dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>
+<key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string></array>
+</dict></plist>

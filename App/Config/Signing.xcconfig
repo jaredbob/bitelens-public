@@ -1,0 +1,3 @@
+BITELENS_IDENTIFIER_PREFIX = com.example
+// Machine-local app configuration and signing.
+#include? "Local.xcconfig"

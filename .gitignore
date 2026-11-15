@@ -1,0 +1,17 @@
+.DS_Store
+
+# Local configuration
+.env
+.env.*
+!.env.example
+
+# Xcode and Swift build artifacts
+DerivedData/
+**/xcuserdata/
+*.xcuserstate
+.build/
+.swiftpm/
+
+# Machine-local app configuration and signing
+App/Config/Local.xcconfig
+supabase/.temp/

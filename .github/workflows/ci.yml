@@ -1,0 +1,130 @@
+name: BiteLens CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bitelens-ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'release' }}
+
+jobs:
+  source:
+    name: Source and release checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify release provenance
+        if: github.event_name == 'release'
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git merge-base --is-ancestor HEAD refs/remotes/origin/main
+          scripts/check-release-version.sh "$RELEASE_TAG"
+      - name: Scan for committed credentials
+        run: |
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            --output "$RUNNER_TEMP/gitleaks.tar.gz"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" git --redact --no-banner --log-opts=HEAD
+          "$RUNNER_TEMP/gitleaks" dir --redact --no-banner .
+
+  backend:
+    name: Supabase tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      SUPABASE_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.18.0'
+          package-manager-cache: false
+      - run: node --test supabase/tests/*.test.ts
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
+        with:
+          version: '3.0.0'
+      - name: Test meal and observation sync on a disposable database
+        run: |
+          umask 077
+          stack="$RUNNER_TEMP/supabase-tests"
+          mkdir -p "$stack/supabase/migrations"
+          supabase init --workdir "$stack"
+          for migration in supabase/migrations/*.sql; do
+            case "$migration" in
+              *_bitelens_beta_*.sql) continue ;;
+            esac
+            cp "$migration" "$stack/supabase/migrations/"
+          done
+          supabase start --workdir "$stack" --yes --exclude realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor >"$RUNNER_TEMP/supabase-start.log"
+          supabase status --workdir "$stack" -o json >"$RUNNER_TEMP/supabase-status.json"
+          python3 supabase/tests/meal-sync.py "$RUNNER_TEMP/supabase-status.json"
+          cp supabase/migrations/*_bitelens_beta_*.sql "$stack/supabase/migrations/"
+          supabase migration up --workdir "$stack"
+          python3 supabase/tests/meal-sync.py "$RUNNER_TEMP/supabase-status.json" --beta
+      - name: Stop local services
+        if: always()
+        run: |
+          stack="$RUNNER_TEMP/supabase-tests"
+          if [ -f "$stack/supabase/config.toml" ]; then
+            supabase stop --workdir "$stack" --no-backup
+          fi
+
+  ios:
+    name: iOS tests and Release build
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify generated Xcode project
+        run: |
+          python3 scripts/generate-xcode-project.py
+          git diff --exit-code -- BiteLens.xcodeproj App/Config/Beta-Info.plist
+      - run: scripts/test-core.sh
+      - name: Compile the app and extensions without signing
+        run: |
+          xcodebuild -project BiteLens.xcodeproj -scheme BiteLens \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/bitelens-build" \
+            CODE_SIGNING_ALLOWED=NO -quiet build
+      - name: Compile BiteLens Beta and extensions without signing
+        run: |
+          xcodebuild -project BiteLens.xcodeproj -scheme 'BiteLens Beta' \
+            -configuration 'Beta Release' -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/bitelens-build" \
+            CODE_SIGNING_ALLOWED=NO -quiet build
+
+  ios-ui:
+    name: iOS UI smoke tests
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify generated Xcode project
+        run: |
+          python3 scripts/generate-xcode-project.py
+          git diff --exit-code -- BiteLens.xcodeproj App/Config/Beta-Info.plist
+      - name: Run UI smoke tests on an iPhone simulator
+        run: scripts/test-ui.sh
+      - name: Verify the beta privacy link before sign-in
+        run: scripts/test-ui.sh --beta
