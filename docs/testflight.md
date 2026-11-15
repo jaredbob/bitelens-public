@@ -2,10 +2,25 @@
 
 GitHub runs the same checks on pull requests, pushes to main, and published releases. The release run also checks that the tagged commit belongs to main and that its version matches every Xcode target. Hosted jobs use read-only repository access, pinned actions, a credential scan, and a disposable Supabase database for the meal-sync security tests.
 
+## Check the release before publishing
+
+From a current bitelens-public checkout with GitHub CLI signed in, pass the proposed
+tag and the full commit SHA you intend to release:
+
+```sh
+scripts/check-release-ready.sh v0.5.0 FULL_COMMIT_SHA
+```
+
+The command checks that the commit is on protected `main`, its push to `main`
+passed BiteLens CI, and the tag matches the Xcode marketing version at that
+commit. It also checks the target of the tag if the tag already exists. The
+command only reads from GitHub. If it succeeds, use the same tag and exact SHA
+when creating the GitHub prerelease.
+
 ## Publish and archive an internal beta
 
-1. Merge the release changes into main and check that CI passes on that commit. Update every target's marketing version in `scripts/generate-xcode-project.py` and regenerate the Xcode project when preparing a new version.
-2. In GitHub Releases for your repository, create a prerelease on that commit. Use a tag such as `v0.1.0` that matches the Xcode marketing version. Enable immutable releases in your repository settings and check the target commit before publishing.
+1. Update every target's marketing version in `scripts/generate-xcode-project.py` and regenerate the Xcode project when preparing a new version. Merge the release changes into main, then run the pre-publish check above on the release commit.
+2. In GitHub Releases, create an immutable prerelease using the checked tag and full SHA.
 3. Wait for the release-triggered **BiteLens CI** run to pass. On the Mac, sign in to GitHub CLI and to the paid Apple team in Xcode. Choose an unused, increasing build number for the version shown in TestFlight.
 4. From a BiteLens checkout run `scripts/archive-testflight.sh v0.1.0 1 YOUR_APPLE_TEAM_ID`. It checks GitHub's immutable release, verifies that its exact commit is on main and passed release CI, then makes a signed Release archive from that commit. The archive path is printed on success. Signing stays in the Mac's Keychain and Xcode account.
 5. Open the archive in Xcode Organizer and choose **Distribute App → TestFlight Internal Only** for the current owner-only build. Wait for processing in App Store Connect, resolve any export-compliance prompts, then assign it to an internal group for your Apple account. Install it from TestFlight on your iPhone and verify sign-in, camera, meal logging, sync, and the Share and Control Center extensions.
@@ -54,7 +69,7 @@ Append `/functions/v1/beta-privacy` to your beta project URL and open it in a si
 
 ### Archive, upload, and submit
 
-1. Merge the release changes to main. Publish an immutable prerelease on the resulting commit with a tag matching the Xcode marketing version, and wait for the release-triggered **BiteLens CI** to pass.
+1. Merge the release changes to main and run the pre-publish check above on the release commit. Publish an immutable prerelease using the checked tag and full SHA, then wait for the release-triggered **BiteLens CI** to pass.
 2. Confirm the App Group is assigned to the beta app and Share extension App IDs. Choose an unused build number for the version. To archive the exact verified release with a public-facing support address, run the command below with the paid team ID and the approved support address. The support address is visible in the beta app. With no support address configured, the app directs testers to Send Beta Feedback in TestFlight.
 3. Open the archive in Xcode Organizer and use **Distribute App → TestFlight & App Store** to upload a build eligible for external TestFlight. Wait for processing and resolve any export-compliance questions. [Xcode distribution](https://developer.apple.com/documentation/xcode/distributing-your-app-for-beta-testing-and-releases/)
 4. Create an external TestFlight group on the BiteLens Beta record. Fill in the [beta metadata](testflight-beta-notes.md) and provide a feedback email. Enter the App Review contact name, email, international-format phone number, and credentials for a separate approved reviewer account with an empty record. Keep those credentials in App Store Connect.
