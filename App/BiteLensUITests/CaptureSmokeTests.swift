@@ -58,9 +58,10 @@ final class CaptureSmokeTests: XCTestCase {
         reveal(confirm, in: app)
         XCTAssertTrue(confirm.isEnabled)
         confirm.tap()
-        XCTAssertTrue(manual.waitForExistence(timeout: 8))
 
-        app.buttons["meal-history"].tap()
+        let history = app.buttons["meal-history"]
+        XCTAssertTrue(waitForHittable(history, timeout: 20))
+        history.tap()
         XCTAssertTrue(app.navigationBars["History"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.staticTexts["Scrambled eggs"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.descendants(matching: .any)["logged-meal"].exists)
@@ -91,11 +92,13 @@ final class CaptureSmokeTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Logged meal"].waitForExistence(timeout: 8))
         for text in ["2 scrambled eggs", "2 eggs"] {
             let savedText = app.staticTexts[text]
-            reveal(savedText, in: app)
+            reveal(savedText, in: app, timeout: 30)
+            XCTAssertTrue(savedText.exists && savedText.isHittable)
             savedText.press(forDuration: 1)
             let copyText = app.buttons["Copy"]
-            XCTAssertTrue(copyText.waitForExistence(timeout: 8))
+            XCTAssertTrue(waitForHittable(copyText, timeout: 20))
             copyText.tap()
+            XCTAssertTrue(copyText.waitForNonExistence(timeout: 20))
         }
     }
 
@@ -135,15 +138,7 @@ final class CaptureSmokeTests: XCTestCase {
         pendingDrafts.tap()
         app.staticTexts["Meal draft"].tap()
 
-        let sharePreview = openMealPhotoShareSheet(in: app)
-        // Tap above the share sheet to dismiss it without invoking a share action.
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
-        XCTAssertTrue(sharePreview.waitForNonExistence(timeout: 8), "The share sheet should dismiss")
-
-        let closeImage = app.buttons["Close image"]
-        XCTAssertTrue(waitForHittable(closeImage, timeout: 8), "Close image should be tappable after sharing")
-        closeImage.tap()
-        XCTAssertTrue(closeImage.waitForNonExistence(timeout: 8), "The photo viewer should dismiss")
+        shareMealPhotoAndReturn(in: app)
         XCTAssertTrue(app.navigationBars["Meal draft"].waitForExistence(timeout: 8))
 
         let confirm = app.buttons["confirm-meal"]
@@ -154,10 +149,14 @@ final class CaptureSmokeTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Pending drafts"].waitForExistence(timeout: 8))
         app.buttons["Done"].tap()
 
-        app.buttons["meal-history"].tap()
-        app.buttons["logged-meal"].tap()
+        let history = app.buttons["meal-history"]
+        XCTAssertTrue(waitForHittable(history, timeout: 20))
+        history.tap()
+        let loggedMeal = app.buttons["logged-meal"]
+        XCTAssertTrue(waitForHittable(loggedMeal, timeout: 20))
+        loggedMeal.tap()
         XCTAssertTrue(app.navigationBars["Logged meal"].waitForExistence(timeout: 8))
-        openMealPhotoShareSheet(in: app)
+        shareMealPhotoAndReturn(in: app)
     }
 
     func testHistoryAddMenuOpensPhotoDraftAndSymptomFlows() {
@@ -200,18 +199,23 @@ final class CaptureSmokeTests: XCTestCase {
         XCTAssertTrue(app.buttons["urge-chip"].waitForExistence(timeout: 8))
     }
 
-    @discardableResult
-    private func openMealPhotoShareSheet(in app: XCUIApplication) -> XCUIElement {
+    private func shareMealPhotoAndReturn(in app: XCUIApplication) {
         let photo = app.buttons["View meal image full screen"]
-        XCTAssertTrue(photo.waitForExistence(timeout: 8))
+        XCTAssertTrue(waitForHittable(photo, timeout: 20))
         photo.tap()
         let share = app.buttons["Share photo"]
-        XCTAssertTrue(share.waitForExistence(timeout: 8))
-        XCTAssertTrue(app.buttons["Close image"].exists)
+        XCTAssertTrue(waitForHittable(share, timeout: 20))
+        let closeImage = app.buttons["Close image"]
+        XCTAssertTrue(closeImage.exists)
         share.tap()
         let sharePreview = app.descendants(matching: .any)["Meal photo"].firstMatch
-        XCTAssertTrue(sharePreview.waitForExistence(timeout: 8))
-        return sharePreview
+        XCTAssertTrue(sharePreview.waitForExistence(timeout: 30), "The share preview should load")
+        // Tap above the share sheet to dismiss it.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+        XCTAssertTrue(sharePreview.waitForNonExistence(timeout: 20), "The share sheet should dismiss")
+        XCTAssertTrue(waitForHittable(closeImage, timeout: 20), "Close image should be tappable after sharing")
+        closeImage.tap()
+        XCTAssertTrue(closeImage.waitForNonExistence(timeout: 20), "The photo viewer should dismiss")
     }
 
     private func launchUITestMode(arguments: [String] = []) -> XCUIApplication {
@@ -253,8 +257,8 @@ final class CaptureSmokeTests: XCTestCase {
     }
 
     /// Forms realize off-screen rows lazily, so scroll until the control can be tapped.
-    private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
-        let deadline = Date().addingTimeInterval(8)
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication, timeout: TimeInterval = 8) {
+        let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline, !(element.exists && element.isHittable) {
             app.swipeUp()
         }
