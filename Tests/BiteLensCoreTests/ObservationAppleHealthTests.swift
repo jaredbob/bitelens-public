@@ -243,7 +243,7 @@ private struct ObservationHealthFixture {
     func remove() { try? FileManager.default.removeItem(at: directory) }
 }
 
-private actor TestObservationHealthClient: ObservationAppleHealthClient {
+actor TestObservationHealthClient: ObservationAppleHealthClient {
     private(set) var writeAccessRequests: [Set<Symptom>] = []
     private(set) var samples: [ObservationAppleHealthSample] = []
     private var access: [Symptom: ObservationAppleHealthWriteAccess] = [:]

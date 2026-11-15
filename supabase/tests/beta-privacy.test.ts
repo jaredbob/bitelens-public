@@ -15,6 +15,8 @@ test("visitors can read the beta privacy policy without signing in", async () =>
   assert.match(policy, /xAI/);
   assert.match(policy, /request deletion/);
   assert.match(policy, /TestFlight/);
+  assert.match(policy, /Optional Apple Health sharing/);
+  assert.match(policy, /first account to opt in/);
 });
 
 test("the policy URL accepts HEAD and rejects writes", async () => {

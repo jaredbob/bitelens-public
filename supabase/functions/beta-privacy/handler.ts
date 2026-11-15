@@ -6,7 +6,13 @@ Your record
 
 The app saves your drafts, images, history, preferences, and pending changes in an account-specific area on your iPhone. Supabase hosts your confirmed meals, meal items, symptom entries, binge-eating urges, and the information needed to sync edits and deletions. Approved testers can access their own cloud records. The beta uploads changes when connected. A fresh install starts with an empty local history.
 
-Meal Images stay on your iPhone apart from the analysis transfer described below. They expire seven days after capture or sharing. BiteLens removes expired images when it runs and can access them. The beta uses a separate backend project and does not export to Apple Health.
+Meal Images stay on your iPhone apart from the analysis transfer described below. They expire seven days after capture or sharing. BiteLens removes expired images when it runs and can access them. The beta uses a separate backend project.
+
+Optional Apple Health sharing
+
+In beta versions with Apple Health support, you can choose separately in Settings to share meal nutrient totals and alcohol intake, or symptom type, time, and severity where available. Symptom sharing also records increased appetite at the time of an urge when you confirm it by saving a binge-eating urge. Meal images, notes, urge intensity, and meal links stay in BiteLens. BiteLens uses results of its Apple Health queries only on your iPhone to maintain its exported entries.
+
+The first account to opt in can share from that installation. Signing out, switching accounts, or turning sharing off pauses exports and keeps entries already in Apple Health. You can manage write permissions and remove existing entries in the Health app.
 
 Optional meal analysis
 

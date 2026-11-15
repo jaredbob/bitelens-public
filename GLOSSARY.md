@@ -71,3 +71,11 @@ from BiteLens to Apple Health.
 An action in Settings that brings recent Logged Meals on the iPhone into ongoing
 Apple Health Sync. It covers today and the previous 29 calendar days by recorded
 local Meal Time.
+
+**Apple Health Symptom Sharing**:
+The optional transfer to Apple Health of Symptom Entries and increased appetite
+confirmed when recording Binge-Eating Urges.
+
+**Apple Health Connection**:
+The association that allows one BiteLens Account to use Apple Health Sync and
+Apple Health Symptom Sharing from a BiteLens Beta installation.

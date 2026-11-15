@@ -37,6 +37,19 @@ public enum AppleHealthBackfillError: Error {
     case writeAccessRequired
 }
 
+public enum AppleHealthConnectionStatus: Equatable, Sendable {
+    case unavailable
+    case readyToConnect
+    case connected
+    case connectedToAnotherAccount
+}
+
+enum BetaAppleHealthAccount {
+    case unavailable
+    case unclaimed
+    case connected(UUID)
+}
+
 public struct AppleHealthSyncStatus: Equatable, Sendable {
     public enum WriteAccess: Equatable, Sendable {
         case checking
@@ -119,12 +132,65 @@ enum AppleHealthNutrientOutcome: Codable, Equatable {
 }
 
 extension MealWorkflow {
+    public var appleHealthConnectionStatus: AppleHealthConnectionStatus {
+        guard let activeAccountID, localMealsLoaded else { return .unavailable }
+        guard isBeta else { return .connected }
+        switch betaAppleHealthAccount {
+        case .unavailable: return .unavailable
+        case .unclaimed: return .readyToConnect
+        case .connected(let id): return id == activeAccountID ? .connected : .connectedToAnotherAccount
+        }
+    }
+
+    private var betaAppleHealthAccountFile: URL? {
+        accountDirectory?.appendingPathComponent("AppleHealthConnection.json", isDirectory: false)
+    }
+
+    func loadBetaAppleHealthAccount() {
+        guard let file = betaAppleHealthAccountFile, appleHealth != nil || observationAppleHealth != nil else { return }
+        do {
+            betaAppleHealthAccount = .connected(try JSONDecoder().decode(UUID.self, from: Data(contentsOf: file)))
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            betaAppleHealthAccount = .unclaimed
+        } catch {
+            betaAppleHealthAccount = .unavailable
+        }
+    }
+
+    func prepareAppleHealthOptIn(_ enabled: Bool) -> Bool {
+        if isBeta, enabled, appleHealthConnectionStatus == .readyToConnect,
+           let account = activeAccountID, let file = betaAppleHealthAccountFile {
+            // The connection lives with the installation, outside each account's library.
+            loadBetaAppleHealthAccount()
+            if case .unclaimed = betaAppleHealthAccount {
+                do {
+                    try FileManager.default.createDirectory(at: file.deletingLastPathComponent(),
+                                                            withIntermediateDirectories: true)
+                    let data = try JSONEncoder().encode(account)
+                    #if os(iOS)
+                    try data.write(to: file, options: [.atomic, .completeFileProtection])
+                    #else
+                    try data.write(to: file, options: .atomic)
+                    #endif
+                    betaAppleHealthAccount = .connected(account)
+                } catch {
+                    issue = .storageUnavailable
+                }
+            }
+        }
+        return appleHealthConnectionStatus == .connected
+    }
+
+    func isAppleHealthActivationCurrent(_ activation: UUID) -> Bool {
+        activation == accountActivationID && appleHealthConnectionStatus == .connected
+    }
+
     public var appleHealthSyncEnabled: Bool {
-        !isBeta && access == .owner && localMealsLoaded && localMeals.appleHealthSyncEnabled
+        appleHealthConnectionStatus == .connected && localMeals.appleHealthSyncEnabled
     }
 
     public var appleHealthSyncStatus: AppleHealthSyncStatus {
-        guard access == .owner, localMealsLoaded else {
+        guard appleHealthConnectionStatus == .connected else {
             return AppleHealthSyncStatus(writeAccess: .checking, hasPendingWork: false, hasFailedWork: false)
         }
         let mealsByID = appleHealthLoggedMealsByID
@@ -143,7 +209,7 @@ extension MealWorkflow {
     }
 
     public func setAppleHealthSyncEnabled(_ enabled: Bool) async {
-        guard access == .owner, localMealsLoaded, appleHealth != nil, enabled != appleHealthSyncEnabled else { return }
+        guard appleHealth != nil, enabled != appleHealthSyncEnabled, prepareAppleHealthOptIn(enabled) else { return }
         var updated = localMeals
         updated.appleHealthSyncEnabled = enabled
         do { try saveLocalMeals(updated) }
@@ -169,6 +235,7 @@ extension MealWorkflow {
 
     @discardableResult public func backfillAppleHealth(timeZone: TimeZone = .current) async throws -> Int {
         guard appleHealthSyncEnabled else { throw AppleHealthBackfillError.paused }
+        let activation = accountActivationID
         let today = now()
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
@@ -178,7 +245,9 @@ extension MealWorkflow {
         let selected = Set(loggedMeals.filter { (firstDay...lastDay).contains($0.record.mealTime.localDate) }.map(\.id))
 
         await retryAppleHealthSync()
-        guard appleHealthSyncEnabled else { throw AppleHealthBackfillError.paused }
+        guard isAppleHealthActivationCurrent(activation), appleHealthSyncEnabled else {
+            throw AppleHealthBackfillError.paused
+        }
         guard case .available(let authorized) = appleHealthWriteAccess else { throw AppleHealthBackfillError.unavailable }
         guard !authorized.isEmpty else { throw AppleHealthBackfillError.writeAccessRequired }
 
@@ -195,8 +264,8 @@ extension MealWorkflow {
     }
 
     func scheduleAppleHealthSync(requestAuthorization: Bool = false) {
-        guard access == .owner, localMealsLoaded, appleHealth != nil else { return }
-        if requestAuthorization, needsAppleHealthAuthorization, !isRequestingAppleHealthAuthorization {
+        guard appleHealthConnectionStatus == .connected, appleHealth != nil else { return }
+        if requestAuthorization, needsAppleHealthAuthorization, appleHealthAuthorizationActivation != accountActivationID {
             shouldRequestAppleHealthAuthorization = true
         }
         needsAppleHealthSyncPass = true
@@ -206,7 +275,8 @@ extension MealWorkflow {
                 needsAppleHealthSyncPass = false
                 let requestAuthorization = shouldRequestAppleHealthAuthorization
                 shouldRequestAppleHealthAuthorization = false
-                await exportPendingAppleHealthSamples(requestAuthorization: requestAuthorization)
+                await exportPendingAppleHealthSamples(activation: accountActivationID,
+                                                      requestAuthorization: requestAuthorization)
             }
             appleHealthSyncTask = nil
         }
@@ -222,16 +292,16 @@ extension MealWorkflow {
         return Dictionary(uniqueKeysWithValues: meals.map { ($0.id, $0) })
     }
 
-    private func requestAppleHealthAuthorization(using appleHealth: any AppleHealthClient) async {
-        isRequestingAppleHealthAuthorization = true
-        defer { isRequestingAppleHealthAuthorization = false }
+    private func requestAppleHealthAuthorization(using appleHealth: any AppleHealthClient, activation: UUID) async {
+        appleHealthAuthorizationActivation = activation
+        defer { appleHealthAuthorizationActivation = nil }
         let result: AppleHealthAuthorizationRequest
         do {
             // A completed request can still leave write access denied.
             try await appleHealth.requestAuthorization(for: AppleHealthSample.supportedNutrients)
             result = .completed
         } catch { result = .failed }
-        guard access == .owner, localMealsLoaded else { return }
+        guard isAppleHealthActivationCurrent(activation) else { return }
         var updated = localMeals
         updated.appleHealthAuthorizationRequest = result
         if result == .completed { updated.appleHealthAuthorizationIncludesAlcohol = true }
@@ -241,16 +311,20 @@ extension MealWorkflow {
         catch { issue = .storageUnavailable }
     }
 
-    private func exportPendingAppleHealthSamples(requestAuthorization: Bool) async {
-        guard access == .owner, localMealsLoaded, let appleHealth else { return }
-        guard await appleHealth.isAvailable() else {
+    private func exportPendingAppleHealthSamples(activation: UUID, requestAuthorization: Bool) async {
+        guard isAppleHealthActivationCurrent(activation), let appleHealth else { return }
+        let available = await appleHealth.isAvailable()
+        guard isAppleHealthActivationCurrent(activation) else { return }
+        guard available else {
             appleHealthWriteAccess = .unavailable
             return
         }
         if requestAuthorization, needsAppleHealthAuthorization {
-            await requestAppleHealthAuthorization(using: appleHealth)
+            await requestAppleHealthAuthorization(using: appleHealth, activation: activation)
+            guard isAppleHealthActivationCurrent(activation) else { return }
         }
         let authorized = await appleHealth.authorizedNutrients()
+        guard isAppleHealthActivationCurrent(activation) else { return }
         appleHealthWriteAccess = .available(authorized)
         guard appleHealthSyncEnabled else { return }
         let mealsByID = appleHealthLoggedMealsByID
@@ -258,18 +332,20 @@ extension MealWorkflow {
         for (mealID, state) in localMeals.appleHealthMeals {
             let meal = mealsByID[mealID]
             for change in state.pendingChanges(for: meal) {
-                guard appleHealthSyncEnabled else { return }
+                guard isAppleHealthActivationCurrent(activation), appleHealthSyncEnabled else { return }
                 guard isCurrentAppleHealthMeal(mealID, revision: meal?.revision) else { break }
                 guard authorized.contains(change.nutrient) else { continue }
 
                 do {
                     try await reconcileAppleHealthSample(mealID: mealID, meal: meal, change: change,
-                                                         using: appleHealth)
+                                                         using: appleHealth, activation: activation)
                 } catch {
+                    guard isAppleHealthActivationCurrent(activation) else { return }
                     recordAppleHealthFailure(mealID: mealID, nutrient: change.nutrient)
                 }
             }
 
+            guard isAppleHealthActivationCurrent(activation) else { return }
             if meal == nil, let state = localMeals.appleHealthMeals[mealID],
                !state.outcomes.values.contains(where: \.mayHaveSample) {
                 var updated = localMeals
@@ -284,12 +360,13 @@ extension MealWorkflow {
     }
 
     private func reconcileAppleHealthSample(mealID: UUID, meal: LoggedMeal?, change: AppleHealthNutrientChange,
-                                            using appleHealth: any AppleHealthClient) async throws {
+                                            using appleHealth: any AppleHealthClient, activation: UUID) async throws {
         let nutrient = change.nutrient
         let sampleRevision: Int?
         if change.previous?.mayHaveSample == true {
             sampleRevision = try await appleHealth.ownSampleRevision(mealID: mealID, nutrient: nutrient)
-            guard appleHealthSyncEnabled, isCurrentAppleHealthMeal(mealID, revision: meal?.revision) else { return }
+            guard isAppleHealthActivationCurrent(activation), appleHealthSyncEnabled,
+                  isCurrentAppleHealthMeal(mealID, revision: meal?.revision) else { return }
         } else {
             sampleRevision = nil
         }
@@ -299,7 +376,8 @@ extension MealWorkflow {
             // The first write may have committed before HealthKit acknowledged it.
             wasRemovedInHealth = try await appleHealth.hasOwnSampleDeletion(mealID: mealID, nutrient: nutrient,
                                                                             revision: attemptedRevision)
-            guard appleHealthSyncEnabled, isCurrentAppleHealthMeal(mealID, revision: meal?.revision) else { return }
+            guard isAppleHealthActivationCurrent(activation), appleHealthSyncEnabled,
+                  isCurrentAppleHealthMeal(mealID, revision: meal?.revision) else { return }
         }
 
         let outcome: AppleHealthNutrientOutcome?
@@ -328,6 +406,7 @@ extension MealWorkflow {
         }
         // Keep the Health outcome even if the meal changed while the request was in flight.
         // A later pass uses the current meal revision and this outcome together.
+        guard isAppleHealthActivationCurrent(activation) else { return }
         try saveAppleHealthOutcome(outcome, mealID: mealID, nutrient: nutrient)
     }
 
