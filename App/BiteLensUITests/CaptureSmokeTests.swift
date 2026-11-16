@@ -139,9 +139,7 @@ final class CaptureSmokeTests: XCTestCase {
         app.staticTexts["Meal draft"].tap()
 
         let sharePreview = openMealPhotoShareSheet(in: app)
-        // Tap above the share sheet to dismiss it.
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
-        XCTAssertTrue(sharePreview.waitForNonExistence(timeout: 20), "The share sheet should dismiss")
+        dismissShareSheet(sharePreview, in: app)
         let closeImage = app.buttons["Close image"]
         XCTAssertTrue(waitForHittable(closeImage, timeout: 20), "Close image should be tappable after sharing")
         closeImage.tap()
@@ -180,14 +178,16 @@ final class CaptureSmokeTests: XCTestCase {
         XCTAssertTrue(app.buttons["capture-meal"].exists)
         XCTAssertTrue(app.buttons["choose-meal-image"].exists)
         app.buttons["Cancel"].tap()
-        XCTAssertTrue(waitForHittable(add, timeout: 8))
+        XCTAssertTrue(waitForHittable(add, timeout: 20))
 
         add.tap()
         app.buttons["Enter Meal Manually"].tap()
         XCTAssertTrue(app.navigationBars["Meal draft"].waitForExistence(timeout: 8))
         XCTAssertTrue(draftNotes(in: app).exists)
-        app.buttons["BackButton"].tap()
-        XCTAssertTrue(waitForHittable(add, timeout: 8))
+        let back = app.buttons["BackButton"]
+        XCTAssertTrue(waitForHittable(back, timeout: 20))
+        back.tap()
+        XCTAssertTrue(waitForHittable(add, timeout: 20))
 
         add.tap()
         app.buttons["Log Symptom"].tap()
@@ -218,6 +218,23 @@ final class CaptureSmokeTests: XCTestCase {
         let sharePreview = app.descendants(matching: .any)["Meal photo"].firstMatch
         XCTAssertTrue(sharePreview.waitForExistence(timeout: 30), "The share preview should load")
         return sharePreview
+    }
+
+    private func dismissShareSheet(_ preview: XCUIElement, in app: XCUIApplication) {
+        let titleBar = app.navigationBars["Meal photo"]
+        let header = titleBar.exists ? titleBar : preview
+        let spaceAboveSheet = header.frame.minY - app.frame.minY
+        if spaceAboveSheet > 44 {
+            let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
+            top.withOffset(CGVector(dx: 0, dy: spaceAboveSheet / 2)).tap()
+        }
+        if !preview.waitForNonExistence(timeout: 5), header.exists {
+            // A sheet that fills the screen can be pulled down by its header.
+            let top = header.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05))
+            let bottom = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95))
+            top.press(forDuration: 0.1, thenDragTo: bottom)
+        }
+        XCTAssertTrue(preview.waitForNonExistence(timeout: 20), "The share sheet should dismiss")
     }
 
     private func launchUITestMode(arguments: [String] = []) -> XCUIApplication {

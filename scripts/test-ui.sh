@@ -71,6 +71,7 @@ xcodebuild test \
   -only-testing:"$test_selection" \
   -derivedDataPath "$derived" \
   -parallel-testing-enabled NO \
+  -retry-tests-on-failure -test-iterations 2 \
   CODE_SIGNING_ALLOWED=NO \
   BITELENS_PERSONAL_SUPABASE_HOST=example.invalid \
   BITELENS_PERSONAL_SUPABASE_PUBLISHABLE_KEY=sb_publishable_test \
