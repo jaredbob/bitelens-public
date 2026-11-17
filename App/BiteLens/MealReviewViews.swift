@@ -1,4 +1,5 @@
 import BiteLensCore
+import LinkPresentation
 import SwiftUI
 import UIKit
 
@@ -69,6 +70,8 @@ private struct FullScreenMealImage: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
     @State private var image: UIImage?
+    @State private var sharedPhoto: SharedPhoto?
+    @State private var shareFailed = false
 
     var body: some View {
         let isExpired = workflow.isPhotoExpired(photo)
@@ -82,8 +85,13 @@ private struct FullScreenMealImage: View {
             }
             HStack {
                 if canDisplay, let image {
-                    let photo = Image(uiImage: image)
-                    ShareLink(item: photo, preview: SharePreview("Meal photo", image: photo)) {
+                    Button {
+                        do {
+                            sharedPhoto = try SharedPhoto(image: image)
+                        } catch {
+                            shareFailed = true
+                        }
+                    } label: {
                         Label("Share photo", systemImage: "square.and.arrow.up")
                             .font(.title2)
                             .frame(width: 44, height: 44)
@@ -103,7 +111,60 @@ private struct FullScreenMealImage: View {
             image = canDisplay ? (try? read()).flatMap(UIImage.init(data:)) : nil
         }
         .onDisappear { image = nil }
+        .sheet(item: $sharedPhoto) { photo in
+            MealPhotoShareSheet(photo: photo)
+                .presentationDetents([.medium, .large])
+        }
+        .alert("Couldn't prepare the photo for sharing", isPresented: $shareFailed) {
+            Button("OK", role: .cancel) {}
+        }
     }
+}
+
+private final class SharedPhoto: NSObject, Identifiable, UIActivityItemSource {
+    static let title = "Meal photo"
+    let url: URL
+
+    init(image: UIImage) throws {
+        guard let data = image.jpegData(compressionQuality: 0.9) else { throw CocoaError(.fileWriteUnknown) }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let file = directory.appendingPathComponent("\(Self.title).jpg")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        do {
+            try data.write(to: file, options: .atomic)
+        } catch {
+            try? FileManager.default.removeItem(at: directory)
+            throw error
+        }
+        url = file
+    }
+
+    deinit {
+        try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+    }
+
+    func activityViewControllerPlaceholderItem(_ controller: UIActivityViewController) -> Any { url }
+
+    func activityViewController(_ controller: UIActivityViewController,
+                                itemForActivityType activityType: UIActivity.ActivityType?) -> Any? { url }
+
+    func activityViewControllerLinkMetadata(_ controller: UIActivityViewController) -> LPLinkMetadata? {
+        let preview = LPLinkMetadata()
+        preview.title = Self.title
+        preview.imageProvider = NSItemProvider(contentsOf: url)
+        return preview
+    }
+}
+
+private struct MealPhotoShareSheet: UIViewControllerRepresentable {
+    let photo: SharedPhoto
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        // Keep the file available even when the viewer clears its on-screen image.
+        UIActivityViewController(activityItems: [photo], applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
 private struct ZoomableMealImage: UIViewRepresentable {

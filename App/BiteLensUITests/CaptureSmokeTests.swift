@@ -162,6 +162,14 @@ final class CaptureSmokeTests: XCTestCase {
         loggedMeal.tap()
         XCTAssertTrue(app.navigationBars["Logged meal"].waitForExistence(timeout: 8))
         openMealPhotoShareSheet(in: app)
+
+        let saveToFiles = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", "Save to Files")).firstMatch
+        if !saveToFiles.isHittable { app.swipeUp() }
+        XCTAssertTrue(waitForHittable(saveToFiles, timeout: 8))
+        saveToFiles.tap()
+        // Files opens its picker only after it receives a readable attachment.
+        XCTAssertTrue(app.buttons["Save"].firstMatch.waitForExistence(timeout: 8))
     }
 
     func testHistoryAddMenuOpensPhotoDraftAndSymptomFlows() {
