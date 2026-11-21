@@ -177,12 +177,18 @@ struct MealCameraView: View {
     }
 
     var body: some View {
+        let showsPreview = shouldRun && camera.status == .ready
         ZStack {
             Color.black.ignoresSafeArea()
-            if shouldRun, camera.status == .ready {
-                CameraPreview(session: camera.device.session)
+            if !suppressesCamera {
+                // Keep the layer mounted across sheets and camera pauses. Removing it
+                // can make AVFoundation rebuild the capture graph during navigation.
+                CameraPreview(device: camera.device, isVisible: showsPreview)
                     .ignoresSafeArea(edges: .bottom)
+                    .opacity(showsPreview ? 1 : 0)
+                    .allowsHitTesting(false)
                     .accessibilityLabel("Meal camera preview")
+                    .accessibilityHidden(!showsPreview)
             }
             VStack(spacing: 20) {
                 Spacer()
