@@ -11,10 +11,9 @@ struct CameraCapture: Sendable {
     let timeZone: TimeZone
 }
 
-/// AVCaptureSession and its mutable capture state are confined to one serial queue.
-/// The main-thread preview layer only attaches the session for display.
+/// Capture operations and preview session changes run on one serial queue.
 final class MealCameraDevice: NSObject, AVCapturePhotoCaptureDelegate, @unchecked Sendable {
-    let session = AVCaptureSession()
+    private let session = AVCaptureSession()
     private let queue = DispatchQueue(label: "com.example.BiteLens.camera")
     private let output = AVCapturePhotoOutput()
     private var configured = false
@@ -59,6 +58,24 @@ final class MealCameraDevice: NSObject, AVCapturePhotoCaptureDelegate, @unchecke
         }
     }
 
+    func attachPreview(_ layer: AVCaptureVideoPreviewLayer) {
+        let preview = CameraPreviewConnection(layer: layer)
+        queue.async { [self] in
+            preview.layer.session = session
+            if let connection = preview.layer.connection, connection.isVideoRotationAngleSupported(90) {
+                connection.videoRotationAngle = 90
+            }
+        }
+    }
+
+    func detachPreview(_ layer: AVCaptureVideoPreviewLayer) {
+        let preview = CameraPreviewConnection(layer: layer)
+        queue.async {
+            // Retain the layer until AVFoundation disconnects it off the main thread.
+            preview.layer.session = nil
+        }
+    }
+
     func capture(completion: @escaping @Sendable (Result<CameraCapture, CameraCaptureFailure>) -> Void) {
         queue.async { [self] in
             guard self.completion == nil, session.isRunning, output.connection(with: .video) != nil else {
@@ -95,6 +112,12 @@ final class MealCameraDevice: NSObject, AVCapturePhotoCaptureDelegate, @unchecke
             callback?(.failure(.captureFailed))
         }
     }
+}
+
+/// Only session and connection properties are accessed from the capture queue.
+/// UIKit owns the layer's hierarchy and layout on the main actor.
+private struct CameraPreviewConnection: @unchecked Sendable {
+    let layer: AVCaptureVideoPreviewLayer
 }
 
 @MainActor final class MealCameraModel: ObservableObject {
@@ -166,21 +189,37 @@ final class MealCameraDevice: NSObject, AVCapturePhotoCaptureDelegate, @unchecke
 }
 
 struct CameraPreview: UIViewRepresentable {
-    let session: AVCaptureSession
+    let device: MealCameraDevice
+    let isVisible: Bool
+
     func makeUIView(context: Context) -> CameraPreviewView {
         let view = CameraPreviewView()
-        view.previewLayer.session = session
         view.previewLayer.videoGravity = .resizeAspectFill
         return view
     }
+
     func updateUIView(_ uiView: CameraPreviewView, context: Context) {
-        if let connection = uiView.previewLayer.connection, connection.isVideoRotationAngleSupported(90) {
-            connection.videoRotationAngle = 90
-        }
+        if isVisible { uiView.attach(to: device) }
+    }
+
+    static func dismantleUIView(_ uiView: CameraPreviewView, coordinator: ()) {
+        uiView.detach()
     }
 }
 
 final class CameraPreviewView: UIView {
     override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
     var previewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
+    private var attachedDevice: MealCameraDevice?
+
+    func attach(to device: MealCameraDevice) {
+        guard attachedDevice == nil else { return }
+        attachedDevice = device
+        device.attachPreview(previewLayer)
+    }
+
+    func detach() {
+        attachedDevice?.detachPreview(previewLayer)
+        attachedDevice = nil
+    }
 }
