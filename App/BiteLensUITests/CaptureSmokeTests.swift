@@ -131,11 +131,53 @@ final class CaptureSmokeTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Started after lunch"].waitForExistence(timeout: 8))
     }
 
+    func testHistorySummariesRememberTheViewAndOpenTheHighDay() {
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: .now)!
+        let weekday = yesterday.formatted(.dateTime.weekday(.wide))
+        let app = launchUITestMode(arguments: ["-BiteLensUITestHistory"])
+        let history = app.buttons["meal-history"]
+        XCTAssertTrue(history.waitForExistence(timeout: 20))
+        history.tap()
+        XCTAssertTrue(app.buttons["logged-meal"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", weekday)).firstMatch.exists)
+
+        app.buttons["Week"].tap()
+        XCTAssertTrue(app.staticTexts["Daily average, 24 g"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["1 day counted"].exists)
+        app.buttons["Month"].tap()
+        app.buttons["history-nutrient"].tap()
+        app.buttons["Calories"].tap()
+        let calorieAverage = app.staticTexts["Daily average, 180 kcal"]
+        XCTAssertTrue(calorieAverage.waitForExistence(timeout: 8))
+
+        app.buttons["All time"].tap()
+        app.buttons["Done"].tap()
+        history.tap()
+        XCTAssertTrue(calorieAverage.waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["All time"].isSelected)
+        let high = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "High")).firstMatch
+        XCTAssertTrue(high.waitForExistence(timeout: 8))
+        XCTAssertTrue(high.label.localizedCaseInsensitiveContains(weekday))
+        high.tap()
+
+        XCTAssertTrue(app.staticTexts["Daily nutrient totals"].waitForExistence(timeout: 8))
+        let meal = app.buttons["logged-meal"]
+        reveal(meal, in: app)
+        XCTAssertTrue(meal.isHittable)
+        let symptom = app.buttons["symptom-chip"]
+        reveal(symptom, in: app)
+        XCTAssertTrue(symptom.isHittable)
+        XCTAssertTrue(symptom.label.contains("Headache"))
+    }
+
     func testDraftAndLoggedMealPhotosOpenFullScreenAndShare() {
         let app = launchUITestMode(arguments: ["-BiteLensUITestPhotoDraft"])
+        let weekday = Date.now.formatted(.dateTime.weekday(.wide))
         let pendingDrafts = app.buttons["pending-drafts"]
         XCTAssertTrue(pendingDrafts.waitForExistence(timeout: 20))
         pendingDrafts.tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", weekday))
+            .firstMatch.waitForExistence(timeout: 8))
         app.staticTexts["Meal draft"].tap()
 
         let sharePreview = openMealPhotoShareSheet(in: app)

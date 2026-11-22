@@ -54,6 +54,16 @@ the initial portion suggestion during review.
 A meal whose contents, consumed portions, and estimated nutrients have been
 reviewed and confirmed for the personal food record.
 
+**Daily Nutrient Total**:
+The amount of one tracked nutrient recorded across the Logged Meals on a single
+recorded local date. The total is incomplete if any Meal Item on that date lacks
+a value for that nutrient.
+
+**Nutrient History Summary**:
+The average, highest, and lowest complete Daily Nutrient Totals for one nutrient
+in a calendar week, calendar month, or across all History. A complete total of
+zero counts.
+
 **Symptom Entry**:
 A self-reported observation of one symptom at a chosen date and time, with
 optional severity and notes. Repeated observations are separate entries.

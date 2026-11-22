@@ -3,9 +3,15 @@ import ImageIO
 
 /// The chosen meal time and local calendar day are independent of photo retention.
 public struct MealTime: Codable, Equatable, Sendable {
+    static let localDateFormat = Date.ISO8601FormatStyle(timeZone: .gmt)
+        .year().month().day().dateSeparator(.dash)
+
     public let instant: Date
     public let localDate: String
     public let timeZoneIdentifier: String
+
+    /// The recorded Gregorian date represented at midnight UTC.
+    public var calendarDate: Date? { try? Self.localDateFormat.parse(localDate) }
 
     public init(instant: Date, timeZone: TimeZone) {
         self.instant = instant

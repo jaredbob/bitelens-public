@@ -433,6 +433,85 @@ private struct DraftOfflineAuth: AuthenticationClient {
     #expect(reopened.dailyMealSummaries.first?.nutrientTotals[.sodium] == NutrientTotal(knownAmount: 0, isIncomplete: false))
 }
 
+@MainActor @Test func nutrientHistoryUsesCompleteDailyTotalsAndFindsTheLatestTiedDates() throws {
+    let fixture = try DraftFixture()
+    defer { fixture.remove() }
+    let workflow = fixture.open()
+    workflow.restoreSession()
+    try logHistoryMeal(workflow, at: "2027-01-04T10:00:00Z", protein: 30)
+    try logHistoryMeal(workflow, at: "2027-01-04T18:00:00Z", protein: 70)
+    try logHistoryMeal(workflow, at: "2027-01-06T10:00:00Z", protein: 160)
+    try logHistoryMeal(workflow, at: "2027-01-06T18:00:00Z", protein: nil)
+    try logHistoryMeal(workflow, at: "2027-01-07T10:00:00Z", protein: 0)
+    try logHistoryMeal(workflow, at: "2027-01-08T10:00:00Z", protein: 100)
+    try logHistoryMeal(workflow, at: "2027-01-11T10:00:00Z", protein: 0)
+    let observationTime = MealTime(instant: try Date.ISO8601FormatStyle().parse("2027-01-12T10:00:00Z"), timeZone: .gmt)
+    try workflow.logSymptom(.headache, time: observationTime)
+    try logHistoryMeal(workflow, at: "2027-01-15T11:00:00Z", protein: 200)
+
+    let reopened = fixture.open()
+    reopened.restoreSession()
+    let now = try Date.ISO8601FormatStyle().parse("2027-01-16T00:30:00Z")
+    let zone = try #require(TimeZone(identifier: "America/Los_Angeles"))
+    let protein = try #require(reopened.nutrientHistory(for: .protein, in: .allTime, asOf: now,
+                                                        timeZone: zone).summaries.first)
+    #expect(protein.dayCount == 4)
+    #expect(protein.average == 50)
+    #expect(protein.high?.amount == 100)
+    #expect(protein.high?.localDate == "2027-01-08")
+    #expect(protein.high?.tieCount == 2)
+    #expect(protein.low?.amount == 0)
+    #expect(protein.low?.localDate == "2027-01-11")
+    #expect(protein.low?.tieCount == 2)
+
+    let calories = try #require(reopened.nutrientHistory(for: .calories, in: .allTime, asOf: now,
+                                                          timeZone: zone).summaries.first)
+    #expect(calories.dayCount == 5)
+    #expect(calories.average == 140)
+    #expect(calories.high?.tieCount == 2)
+    #expect(calories.high?.localDate == "2027-01-06")
+}
+
+@MainActor @Test func nutrientHistoryGroupsRecordedDaysIntoMondayWeeksAndCalendarMonths() throws {
+    let fixture = try DraftFixture()
+    defer { fixture.remove() }
+    let workflow = fixture.open()
+    workflow.restoreSession()
+    let losAngeles = try #require(TimeZone(identifier: "America/Los_Angeles"))
+    let tokyo = try #require(TimeZone(identifier: "Asia/Tokyo"))
+    try logHistoryMeal(workflow, at: "2026-11-01T00:30:00Z", timeZone: losAngeles, protein: 80)
+    try logHistoryMeal(workflow, at: "2026-11-01T00:30:00Z", timeZone: tokyo, protein: 100)
+    try logHistoryMeal(workflow, at: "2026-11-02T10:00:00Z", protein: 90)
+    try logHistoryMeal(workflow, at: "2027-01-10T10:00:00Z", protein: nil)
+    try logHistoryMeal(workflow, at: "2027-01-14T10:00:00Z", protein: 40)
+    let now = try Date.ISO8601FormatStyle().parse("2027-01-15T12:00:00Z")
+    let week = workflow.nutrientHistory(for: .protein, in: .week, asOf: now, timeZone: .gmt)
+    #expect(week.through == (try Date.ISO8601FormatStyle().parse("2027-01-14T00:00:00Z")))
+    let weekStarts = try ["2027-01-11", "2027-01-04", "2026-11-02", "2026-10-26"].map {
+        try Date.ISO8601FormatStyle().parse("\($0)T00:00:00Z")
+    }
+    #expect(week.summaries.compactMap { $0.dates?.lowerBound } == weekStarts)
+    #expect(week.summaries.map(\.average) == [40, nil, 90, 90])
+    #expect(week.summaries.map(\.dayCount) == [1, 0, 1, 2])
+    #expect(week.summaries.last?.high?.localDate == "2026-11-01")
+    #expect(week.summaries.last?.low?.localDate == "2026-10-31")
+
+    let month = workflow.nutrientHistory(for: .protein, in: .month, asOf: now, timeZone: .gmt)
+    #expect(month.summaries.map(\.average) == [40, 95, 80])
+    #expect(month.summaries.map(\.dayCount) == [1, 2, 1])
+    #expect(month.summaries.first?.high?.localDate == "2027-01-14")
+}
+
+@MainActor private func logHistoryMeal(_ workflow: MealWorkflow, at timestamp: String, timeZone: TimeZone = .gmt,
+                                     protein: Double?) throws {
+    let draft = try workflow.startManualDraft(timeZone: timeZone)
+    try workflow.setMealTime(draft.id, instant: Date.ISO8601FormatStyle().parse(timestamp), timeZone: timeZone)
+    try workflow.updateDraftItems(draft.id, items: [
+        MealItem(name: "Meal item", nutrients: .init(caloriesKcal: 100, proteinGrams: protein))
+    ])
+    try workflow.confirmMeal(draft.id)
+}
+
 @MainActor @Test func aCorrectedEstimateUsesTheSameReviewAndKeepsOriginalProvenanceAfterPhotoExpiry() throws {
     let fixture = try DraftFixture()
     defer { fixture.remove() }
@@ -1095,8 +1174,13 @@ func enteringWeightWithoutAUsableBaselineKeepsExistingNutrients(initialWeight: D
     reopened.restoreSession()
     #expect(reopened.loggedMeals == [edited])
     #expect(reopened.pendingMealChanges == [.save(edited.record, revision: 2)])
+    let summary = reopened.nutrientHistory(for: .calories, in: .allTime, asOf: fixture.clock.date, timeZone: .gmt)
+    #expect(summary.summaries.first?.high?.localDate == nextDay.localDate)
+    #expect(summary.summaries.first?.average == 100)
     try reopened.deleteLoggedMeal(draft.id)
     #expect(reopened.dailyMealSummaries.isEmpty)
+    #expect(reopened.nutrientHistory(for: .calories, in: .allTime, asOf: fixture.clock.date,
+                                      timeZone: .gmt).summaries.isEmpty)
     let afterDelete = fixture.open()
     afterDelete.restoreSession()
     #expect(afterDelete.loggedMeals.isEmpty)

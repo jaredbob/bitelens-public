@@ -35,6 +35,9 @@ public struct DailyHistory: Equatable, Sendable, Identifiable {
     public let rows: [HistoryRow]
     public var id: String { localDate }
 
+    /// The recorded Gregorian date represented at midnight UTC.
+    public var calendarDate: Date? { try? MealTime.localDateFormat.parse(localDate) }
+
     public var nutrientTotals: NutrientTotals? {
         let meals = rows.compactMap { row -> LoggedMeal? in
             if case .meal(let meal) = row { return meal }
@@ -43,6 +46,59 @@ public struct DailyHistory: Equatable, Sendable, Identifiable {
         guard !meals.isEmpty else { return nil }
         return DailyMealSummary(localDate: localDate, meals: meals).nutrientTotals
     }
+}
+
+public enum NutrientHistoryPeriod: String, CaseIterable, Sendable {
+    case week, month, allTime
+
+    fileprivate var calendarComponent: Calendar.Component? {
+        switch self {
+        case .week: .weekOfYear
+        case .month: .month
+        case .allTime: nil
+        }
+    }
+}
+
+public struct NutrientHistoryExtreme: Equatable, Sendable {
+    // Gregorian date label at midnight UTC, independent of the meal's actual time zone.
+    public let date: Date
+    public let amount: Double
+    public let tieCount: Int
+    public var localDate: String { MealTime.localDateFormat.format(date) }
+}
+
+public struct NutrientHistorySummary: Equatable, Sendable, Identifiable {
+    public let dates: ClosedRange<Date>?
+    public let dayCount: Int
+    public let average: Double?
+    public let high: NutrientHistoryExtreme?
+    public let low: NutrientHistoryExtreme?
+    public var id: Date? { dates?.lowerBound }
+
+    fileprivate init(dates: ClosedRange<Date>?, totals: [(date: Date, amount: Double)]) {
+        self.dates = dates
+        dayCount = totals.count
+        guard let highest = totals.map(\.amount).max(), let lowest = totals.map(\.amount).min() else {
+            average = nil
+            high = nil
+            low = nil
+            return
+        }
+        average = totals.reduce(0) { $0 + $1.amount } / Double(dayCount)
+        high = Self.extreme(amount: highest, in: totals)
+        low = Self.extreme(amount: lowest, in: totals)
+    }
+
+    private static func extreme(amount: Double, in totals: [(date: Date, amount: Double)]) -> NutrientHistoryExtreme? {
+        let tiedDates = totals.filter { $0.amount == amount }.map(\.date)
+        return tiedDates.max().map { NutrientHistoryExtreme(date: $0, amount: amount, tieCount: tiedDates.count) }
+    }
+}
+
+public struct NutrientHistory: Equatable, Sendable {
+    public let through: Date
+    public let summaries: [NutrientHistorySummary]
 }
 
 extension MealWorkflow {
@@ -58,5 +114,36 @@ extension MealWorkflow {
             return DailyHistory(localDate: date, rows: sorted)
         }
         .sorted { $0.localDate > $1.localDate }
+    }
+
+    public func nutrientHistory(for nutrient: Nutrient, in period: NutrientHistoryPeriod,
+                                asOf date: Date, timeZone: TimeZone = .current) -> NutrientHistory {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .gmt
+        calendar.firstWeekday = 2
+
+        // Group recorded calendar dates independently of travel and daylight saving time.
+        var localCalendar = calendar
+        localCalendar.timeZone = timeZone
+        let today = calendar.date(from: localCalendar.dateComponents([.year, .month, .day], from: date))!
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+        let mealDays = dailyHistory.compactMap { day -> (date: Date, total: NutrientTotal)? in
+            guard let date = day.calendarDate, date <= yesterday,
+                  let totals = day.nutrientTotals else { return nil }
+            return (date, totals[nutrient])
+        }
+
+        let groupedDays = Dictionary(grouping: mealDays) { day -> DateInterval? in
+            period.calendarComponent.flatMap { calendar.dateInterval(of: $0, for: day.date) }
+        }
+        let summaries = groupedDays.map { interval, days in
+            let dates = interval.map { $0.start...calendar.date(byAdding: .day, value: -1, to: $0.end)! }
+            let totals = days.compactMap { day -> (date: Date, amount: Double)? in
+                guard !day.total.isIncomplete, let amount = day.total.knownAmount else { return nil }
+                return (day.date, amount)
+            }
+            return NutrientHistorySummary(dates: dates, totals: totals)
+        }.sorted { ($0.id ?? .distantPast) > ($1.id ?? .distantPast) }
+        return NutrientHistory(through: yesterday, summaries: summaries)
     }
 }
