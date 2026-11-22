@@ -456,13 +456,23 @@ struct MealTimeFields: View {
 struct MealHistoryView: View {
     let workflow: MealWorkflow
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage private var period: NutrientHistoryPeriod?
+    @AppStorage private var nutrient: Nutrient
+    @State private var summaryDate = Date.now
     @State private var showMealCamera = false
     @State private var showLogSymptom = false
     @State private var draftID: UUID?
     @State private var draftError: String?
 
+    init(workflow: MealWorkflow) {
+        self.workflow = workflow
+        let namespace = workflow.activeAccountID.map { "bitelens.account.\($0.uuidString)" } ?? "bitelens"
+        _period = AppStorage("\(namespace).history.period")
+        _nutrient = AppStorage(wrappedValue: .protein, "\(namespace).history.nutrient")
+    }
+
     var body: some View {
-        let days = workflow.dailyHistory
         let pendingDeletions = workflow.pendingMealChanges.count {
             if case .delete = $0 { true } else { false }
         }
@@ -472,57 +482,42 @@ struct MealHistoryView: View {
                       systemImage: "arrow.trianglehead.clockwise")
                     .font(.footnote).foregroundStyle(.secondary)
             }
-            if days.isEmpty {
-                ContentUnavailableView("Nothing logged yet", systemImage: "clock")
-            }
-            ForEach(days) { day in
-                Section(day.localDate) {
-                    if let totals = day.nutrientTotals {
-                        NavigationLink("Daily nutrient totals") {
-                            List {
-                                Section(day.localDate) {
-                                    NutrientTotalRows(totals: totals)
-                                }
-                            }
-                            .navigationTitle("Daily totals")
-                            .navigationBarTitleDisplayMode(.inline)
-                        }
-                    }
-                    ForEach(day.rows) { row in
-                        switch row {
-                        case .meal(let meal):
-                            NavigationLink {
-                                LoggedMealDetail(workflow: workflow, id: meal.id)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(meal.record.items.map(\.portionTitle).joined(separator: ", ")).lineLimit(2)
-                                    HStack {
-                                        Text(meal.record.mealTime.displayTime)
-                                        MealSyncStatus(workflow: workflow, id: meal.id)
+            if let period {
+                summarySections(period)
+            } else {
+                let days = workflow.dailyHistory
+                if days.isEmpty {
+                    ContentUnavailableView("Nothing logged yet", systemImage: "clock")
+                }
+                ForEach(days) { day in
+                    Section(day.dateTitle) {
+                        if let totals = day.nutrientTotals {
+                            NavigationLink("Daily nutrient totals") {
+                                List {
+                                    Section(day.dateTitle) {
+                                        NutrientTotalRows(totals: totals)
                                     }
-                                    .font(.caption).foregroundStyle(.secondary)
                                 }
+                                .navigationTitle("Daily totals")
+                                .navigationBarTitleDisplayMode(.inline)
                             }
-                            .accessibilityIdentifier("logged-meal")
-                            .swipeActions(edge: .leading) {
-                                Button { openDraft { try workflow.copyLoggedMealToDraft(meal.id) } } label: {
-                                    Label("Copy to Draft", systemImage: "document.on.document")
-                                }
-                                .tint(.accentColor)
-                            }
-                        case .observation(let observation):
-                            NavigationLink {
-                                ObservationDetail(workflow: workflow, id: observation.id)
-                            } label: {
-                                ObservationChip(observation: observation)
-                            }
-                            .accessibilityIdentifier(observation.record.kind == .symptom ? "symptom-chip" : "urge-chip")
+                        }
+                        HistoryDayRows(workflow: workflow, day: day) { id in
+                            openDraft { try workflow.copyLoggedMealToDraft(id) }
                         }
                     }
                 }
             }
         }
         .navigationTitle("History")
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .top, spacing: 0) { historyControls }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { summaryDate = .now }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+            summaryDate = .now
+        }
         .navigationDestination(item: $draftID) { id in
             DraftDetail(workflow: workflow, id: id)
         }
@@ -558,9 +553,184 @@ struct MealHistoryView: View {
         } message: { Text(draftError ?? "") }
     }
 
+    private var historyControls: some View {
+        VStack(spacing: 6) {
+            Picker("History view", selection: $period) {
+                Text("Day").tag(nil as NutrientHistoryPeriod?)
+                ForEach(NutrientHistoryPeriod.allCases, id: \.self) { period in
+                    Text(period.title).tag(Optional(period))
+                }
+            }
+            .pickerStyle(.segmented)
+
+            if period != nil {
+                HStack {
+                    Text("Nutrient")
+                    Spacer()
+                    Picker("Nutrient", selection: $nutrient) {
+                        ForEach(Nutrient.allCases, id: \.self) { nutrient in
+                            Text(nutrient.title).tag(nutrient)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .accessibilityIdentifier("history-nutrient")
+                }
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(.bar)
+    }
+
+    @ViewBuilder private func summarySections(_ period: NutrientHistoryPeriod) -> some View {
+        let history = workflow.nutrientHistory(for: nutrient, in: period, asOf: summaryDate)
+        if history.summaries.isEmpty {
+            ContentUnavailableView("No meals before today", systemImage: "chart.bar", description: Text(
+                "Summaries include meals logged through \(history.through.formatted(historyDateStyle))."
+            ))
+        }
+        ForEach(history.summaries) { summary in
+            Section {
+                if let average = summary.average, let high = summary.high, let low = summary.low {
+                    LabeledContent("Daily average", value: nutrient.display(average))
+                    extremeLink("High", extreme: high)
+                    extremeLink("Low", extreme: low)
+                } else {
+                    Text("No complete \(nutrient.title.lowercased()) days")
+                }
+            } header: {
+                Text(period.summaryTitle(dates: summary.dates))
+            } footer: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("^[\(summary.dayCount) day](inflect: true) counted")
+                    if summary.dates.map({ history.through < $0.upperBound }) ?? true {
+                        Text("Through \(history.through.formatted(historyDateStyle))")
+                    }
+                }
+            }
+        }
+    }
+
+    private func extremeLink(_ title: LocalizedStringKey, extreme: NutrientHistoryExtreme) -> some View {
+        NavigationLink {
+            HistoryDayDetail(workflow: workflow, localDate: extreme.localDate)
+        } label: {
+            HStack {
+                Text(title)
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(nutrient.display(extreme.amount)).foregroundStyle(.primary)
+                    Text(extreme.date.formatted(mealDayStyle)).font(.caption)
+                    if extreme.tieCount > 1 {
+                        Text("\(extreme.tieCount) days tied").font(.caption)
+                    }
+                }
+                .multilineTextAlignment(.trailing)
+                .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+        }
+    }
+
     private func openDraft(_ create: () throws -> MealDraft) {
         do { draftID = try create().id }
         catch { draftError = error.draftMessage }
+    }
+}
+
+private let historyCalendar = Calendar(identifier: .gregorian)
+private let historyDateStyle = Date.FormatStyle(date: .abbreviated, time: .omitted,
+                                                calendar: historyCalendar, timeZone: .gmt)
+private let mealDayStyle = historyDateStyle.weekday(.wide)
+
+private extension DailyHistory {
+    var dateTitle: String { calendarDate?.formatted(mealDayStyle) ?? localDate }
+}
+
+private extension NutrientHistoryPeriod {
+    var title: LocalizedStringKey {
+        switch self {
+        case .week: "Week"
+        case .month: "Month"
+        case .allTime: "All time"
+        }
+    }
+
+    func summaryTitle(dates: ClosedRange<Date>?) -> String {
+        guard let dates else { return String(localized: "All time") }
+        switch self {
+        case .week:
+            return Date.IntervalFormatStyle(calendar: historyCalendar, timeZone: .gmt)
+                .month(.abbreviated).day().year().format(dates.lowerBound..<dates.upperBound)
+        case .month:
+            return dates.lowerBound.formatted(historyDateStyle.month(.wide).day(.omitted))
+        case .allTime:
+            return String(localized: "All time")
+        }
+    }
+}
+
+private struct HistoryDayDetail: View {
+    let workflow: MealWorkflow
+    let localDate: String
+
+    var body: some View {
+        let day = workflow.dailyHistory.first { $0.localDate == localDate }
+        List {
+            if let day {
+                if let totals = day.nutrientTotals {
+                    Section("Daily nutrient totals") { NutrientTotalRows(totals: totals) }
+                }
+                Section("Logged entries") { HistoryDayRows(workflow: workflow, day: day) }
+            } else {
+                ContentUnavailableView("Day unavailable", systemImage: "calendar")
+            }
+        }
+        .navigationTitle(day?.dateTitle ?? localDate)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct HistoryDayRows: View {
+    let workflow: MealWorkflow
+    let day: DailyHistory
+    var copyMeal: ((UUID) -> Void)? = nil
+
+    var body: some View {
+        ForEach(day.rows) { row in
+            switch row {
+            case .meal(let meal):
+                NavigationLink {
+                    LoggedMealDetail(workflow: workflow, id: meal.id)
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(meal.record.items.map(\.portionTitle).joined(separator: ", ")).lineLimit(2)
+                        HStack {
+                            Text(meal.record.mealTime.displayTime)
+                            MealSyncStatus(workflow: workflow, id: meal.id)
+                        }
+                        .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .accessibilityIdentifier("logged-meal")
+                .swipeActions(edge: .leading) {
+                    if let copyMeal {
+                        Button { copyMeal(meal.id) } label: {
+                            Label("Copy to Draft", systemImage: "document.on.document")
+                        }
+                        .tint(.accentColor)
+                    }
+                }
+            case .observation(let observation):
+                NavigationLink {
+                    ObservationDetail(workflow: workflow, id: observation.id)
+                } label: {
+                    ObservationChip(observation: observation)
+                }
+                .accessibilityIdentifier(observation.record.kind == .symptom ? "symptom-chip" : "urge-chip")
+            }
+        }
     }
 }
 
@@ -592,9 +762,6 @@ struct LoggedMealDetail: View {
                 if !record.notes.isEmpty {
                     Section("Notes") { CopyableMealText(value: record.notes) }
                 }
-                if let provenance = record.estimateProvenance {
-                    Section("Estimate") { Text(provenance.reviewLabel) }
-                }
                 Section("Meal nutrient totals") {
                     NutrientTotalRows(totals: record.nutrientTotals)
                 }
@@ -612,6 +779,9 @@ struct LoggedMealDetail: View {
                     } header: {
                         CopyableMealText(value: item.portionTitle)
                     }
+                }
+                if let provenance = record.estimateProvenance {
+                    Section("Estimate") { Text(provenance.reviewLabel) }
                 }
                 Section {
                     Button("Delete meal", role: .destructive) { confirmDeletion = true }
@@ -824,6 +994,7 @@ extension MealItem {
 
 
 extension MealTime {
+    var displayDate: String { calendarDate?.formatted(mealDayStyle) ?? localDate }
     var displayDateAndTime: String { "\(localDate) · \(displayTime)" }
 
     var displayTime: String {

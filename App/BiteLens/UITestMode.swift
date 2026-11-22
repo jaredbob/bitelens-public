@@ -20,11 +20,26 @@ enum UITestMode {
     }
 
     #if DEBUG
-    static let ownerID = UUID(uuidString: "00000000-0000-4000-8000-000000000001")!
+    // Each launch starts with fresh account-scoped view preferences.
+    static let ownerID = UUID()
 
     @MainActor static func prepareLaunch(workflow: MealWorkflow) {
         UIView.setAnimationsEnabled(false)
         workflow.restoreSession()
+        if ProcessInfo.processInfo.arguments.contains("-BiteLensUITestHistory") {
+            do {
+                let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: .now)!
+                let draft = try workflow.startManualDraft()
+                try workflow.setMealTime(draft.id, instant: yesterday, timeZone: .current)
+                try workflow.updateDraftItems(draft.id, items: [
+                    MealItem(name: "Chicken", nutrients: .init(caloriesKcal: 180, proteinGrams: 24))
+                ])
+                try workflow.confirmMeal(draft.id)
+                try workflow.logSymptom(.headache, time: MealTime(instant: yesterday, timeZone: .current))
+            } catch {
+                assertionFailure("Couldn't seed the UI test History: \(error)")
+            }
+        }
         guard ProcessInfo.processInfo.arguments.contains("-BiteLensUITestPhotoDraft") else { return }
 
         let size = CGSize(width: 120, height: 90)

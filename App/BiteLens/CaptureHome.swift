@@ -297,7 +297,7 @@ private struct PendingDraftsView: View {
                     DraftDetail(workflow: workflow, id: draft.id)
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(draft.needsMealTime ? "Meal time needed" : draft.mealTime.localDate).font(.headline)
+                        Text(draft.needsMealTime ? "Meal time needed" : draft.mealTime.displayDate).font(.headline)
                         Text(draft.notes.isEmpty ? "Meal draft" : draft.notes).lineLimit(2)
                         let expired = draft.photo.map { workflow.isPhotoExpired($0) } ?? false
                         Text(expired ? "Image expired · not logged" : "Saved locally · not logged")
