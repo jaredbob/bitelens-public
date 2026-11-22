@@ -91,7 +91,7 @@
                 BITELENS_URL_SCHEME = "$(BITELENS_IDENTIFIER_PREFIX).bitelens";
                 IPHONEOS_DEPLOYMENT_TARGET = 18.0;
                 LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks");
-                MARKETING_VERSION = 0.6.2;
+                MARKETING_VERSION = 0.6.3;
                 PRODUCT_BUNDLE_IDENTIFIER = "$(BITELENS_IDENTIFIER_PREFIX).BiteLens";
                 PRODUCT_NAME = "$(TARGET_NAME)";
                 REGISTER_APP_GROUPS = YES;
@@ -120,7 +120,7 @@
                 BITELENS_URL_SCHEME = "$(BITELENS_IDENTIFIER_PREFIX).bitelens.beta";
                 IPHONEOS_DEPLOYMENT_TARGET = 18.0;
                 LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks");
-                MARKETING_VERSION = 0.6.2;
+                MARKETING_VERSION = 0.6.3;
                 PRODUCT_BUNDLE_IDENTIFIER = "$(BITELENS_IDENTIFIER_PREFIX).BiteLens.Beta";
                 PRODUCT_NAME = "$(TARGET_NAME)";
                 REGISTER_APP_GROUPS = YES;
@@ -150,7 +150,7 @@
                 BITELENS_URL_SCHEME = "$(BITELENS_IDENTIFIER_PREFIX).bitelens";
                 IPHONEOS_DEPLOYMENT_TARGET = 18.0;
                 LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks");
-                MARKETING_VERSION = 0.6.2;
+                MARKETING_VERSION = 0.6.3;
                 PRODUCT_BUNDLE_IDENTIFIER = "$(BITELENS_IDENTIFIER_PREFIX).BiteLens";
                 PRODUCT_NAME = "$(TARGET_NAME)";
                 REGISTER_APP_GROUPS = YES;
@@ -179,7 +179,7 @@
                 BITELENS_URL_SCHEME = "$(BITELENS_IDENTIFIER_PREFIX).bitelens.beta";
                 IPHONEOS_DEPLOYMENT_TARGET = 18.0;
                 LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks");
-                MARKETING_VERSION = 0.6.2;
+                MARKETING_VERSION = 0.6.3;
                 PRODUCT_BUNDLE_IDENTIFIER = "$(BITELENS_IDENTIFIER_PREFIX).BiteLens.Beta";
                 PRODUCT_NAME = "$(TARGET_NAME)";
                 REGISTER_APP_GROUPS = YES;
@@ -236,7 +236,7 @@
                 BITELENS_URL_SCHEME = "$(BITELENS_IDENTIFIER_PREFIX).bitelens";
                 IPHONEOS_DEPLOYMENT_TARGET = 18.0;
                 LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks");
-                MARKETING_VERSION = 0.6.2;
+                MARKETING_VERSION = 0.6.3;
                 PRODUCT_BUNDLE_IDENTIFIER = "$(BITELENS_IDENTIFIER_PREFIX).BiteLens.Controls";
                 PRODUCT_NAME = "$(TARGET_NAME)";
                 SDKROOT = iphoneos;
@@ -263,7 +263,7 @@
                 BITELENS_URL_SCHEME = "$(BITELENS_IDENTIFIER_PREFIX).bitelens.beta";
                 IPHONEOS_DEPLOYMENT_TARGET = 18.0;
                 LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks");
-                MARKETING_VERSION = 0.6.2;
+                MARKETING_VERSION = 0.6.3;
                 PRODUCT_BUNDLE_IDENTIFIER = "$(BITELENS_IDENTIFIER_PREFIX).BiteLens.Beta.Controls";
                 PRODUCT_NAME = "$(TARGET_NAME)";
                 SDKROOT = iphoneos;
@@ -290,7 +290,7 @@
                 BITELENS_URL_SCHEME = "$(BITELENS_IDENTIFIER_PREFIX).bitelens";
                 IPHONEOS_DEPLOYMENT_TARGET = 18.0;
                 LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks");
-                MARKETING_VERSION = 0.6.2;
+                MARKETING_VERSION = 0.6.3;
                 PRODUCT_BUNDLE_IDENTIFIER = "$(BITELENS_IDENTIFIER_PREFIX).BiteLens.Controls";
                 PRODUCT_NAME = "$(TARGET_NAME)";
                 SDKROOT = iphoneos;
@@ -317,7 +317,7 @@
                 BITELENS_URL_SCHEME = "$(BITELENS_IDENTIFIER_PREFIX).bitelens.beta";
                 IPHONEOS_DEPLOYMENT_TARGET = 18.0;
                 LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks");
-                MARKETING_VERSION = 0.6.2;
+                MARKETING_VERSION = 0.6.3;
                 PRODUCT_BUNDLE_IDENTIFIER = "$(BITELENS_IDENTIFIER_PREFIX).BiteLens.Beta.Controls";
                 PRODUCT_NAME = "$(TARGET_NAME)";
                 SDKROOT = iphoneos;
@@ -374,7 +374,7 @@
                 BITELENS_URL_SCHEME = "$(BITELENS_IDENTIFIER_PREFIX).bitelens";
                 IPHONEOS_DEPLOYMENT_TARGET = 18.0;
                 LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks");
-                MARKETING_VERSION = 0.6.2;
+                MARKETING_VERSION = 0.6.3;
                 PRODUCT_BUNDLE_IDENTIFIER = "$(BITELENS_IDENTIFIER_PREFIX).BiteLens.Share";
                 PRODUCT_NAME = "$(TARGET_NAME)";
                 REGISTER_APP_GROUPS = YES;
@@ -402,7 +402,7 @@
                 BITELENS_URL_SCHEME = "$(BITELENS_IDENTIFIER_PREFIX).bitelens.beta";
                 IPHONEOS_DEPLOYMENT_TARGET = 18.0;
                 LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks");
-                MARKETING_VERSION = 0.6.2;
+                MARKETING_VERSION = 0.6.3;
                 PRODUCT_BUNDLE_IDENTIFIER = "$(BITELENS_IDENTIFIER_PREFIX).BiteLens.Beta.Share";
                 PRODUCT_NAME = "$(TARGET_NAME)";
                 REGISTER_APP_GROUPS = YES;
@@ -431,7 +431,7 @@
                 BITELENS_URL_SCHEME = "$(BITELENS_IDENTIFIER_PREFIX).bitelens";
                 IPHONEOS_DEPLOYMENT_TARGET = 18.0;
                 LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks");
-                MARKETING_VERSION = 0.6.2;
+                MARKETING_VERSION = 0.6.3;
                 PRODUCT_BUNDLE_IDENTIFIER = "$(BITELENS_IDENTIFIER_PREFIX).BiteLens.Share";
                 PRODUCT_NAME = "$(TARGET_NAME)";
                 REGISTER_APP_GROUPS = YES;
@@ -459,7 +459,7 @@
                 BITELENS_URL_SCHEME = "$(BITELENS_IDENTIFIER_PREFIX).bitelens.beta";
                 IPHONEOS_DEPLOYMENT_TARGET = 18.0;
                 LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks");
-                MARKETING_VERSION = 0.6.2;
+                MARKETING_VERSION = 0.6.3;
                 PRODUCT_BUNDLE_IDENTIFIER = "$(BITELENS_IDENTIFIER_PREFIX).BiteLens.Beta.Share";
                 PRODUCT_NAME = "$(TARGET_NAME)";
                 REGISTER_APP_GROUPS = YES;
@@ -504,7 +504,7 @@
                 GENERATE_INFOPLIST_FILE = YES;
                 IPHONEOS_DEPLOYMENT_TARGET = 18.0;
                 LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks");
-                MARKETING_VERSION = 0.6.2;
+                MARKETING_VERSION = 0.6.3;
                 PRODUCT_BUNDLE_IDENTIFIER = "$(BITELENS_IDENTIFIER_PREFIX).BiteLensUITests";
                 PRODUCT_NAME = "$(TARGET_NAME)";
                 SDKROOT = iphoneos;
@@ -526,7 +526,7 @@
                 GENERATE_INFOPLIST_FILE = YES;
                 IPHONEOS_DEPLOYMENT_TARGET = 18.0;
                 LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks");
-                MARKETING_VERSION = 0.6.2;
+                MARKETING_VERSION = 0.6.3;
                 PRODUCT_BUNDLE_IDENTIFIER = "$(BITELENS_IDENTIFIER_PREFIX).BiteLens.BetaUITests";
                 PRODUCT_NAME = "$(TARGET_NAME)";
                 SDKROOT = iphoneos;
@@ -548,7 +548,7 @@
                 GENERATE_INFOPLIST_FILE = YES;
                 IPHONEOS_DEPLOYMENT_TARGET = 18.0;
                 LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks");
-                MARKETING_VERSION = 0.6.2;
+                MARKETING_VERSION = 0.6.3;
                 PRODUCT_BUNDLE_IDENTIFIER = "$(BITELENS_IDENTIFIER_PREFIX).BiteLensUITests";
                 PRODUCT_NAME = "$(TARGET_NAME)";
                 SDKROOT = iphoneos;
@@ -570,7 +570,7 @@
                 GENERATE_INFOPLIST_FILE = YES;
                 IPHONEOS_DEPLOYMENT_TARGET = 18.0;
                 LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks");
-                MARKETING_VERSION = 0.6.2;
+                MARKETING_VERSION = 0.6.3;
                 PRODUCT_BUNDLE_IDENTIFIER = "$(BITELENS_IDENTIFIER_PREFIX).BiteLens.BetaUITests";
                 PRODUCT_NAME = "$(TARGET_NAME)";
                 SDKROOT = iphoneos;
